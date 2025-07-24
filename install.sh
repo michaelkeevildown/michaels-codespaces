@@ -12,7 +12,7 @@ CODESPACE_REPO="https://github.com/michaelkeevildown/ubuntu-codespace.git"
 CODESPACE_SCRIPTS="$HOME/codespaces"
 CODESPACE_BRANCH="${CODESPACE_BRANCH:-main}"
 
-# Colors for output
+# Colors for output (Homebrew style)
 if [[ -t 1 ]]; then
     tty_red=$(printf '\033[31m')
     tty_green=$(printf '\033[32m')
@@ -28,6 +28,9 @@ else
     tty_bold=''
     tty_reset=''
 fi
+
+# Export for child scripts
+export tty_red tty_green tty_yellow tty_blue tty_bold tty_reset
 
 # Helper functions
 info() {
@@ -122,48 +125,13 @@ main() {
     find scripts -name "*.sh" -exec chmod +x {} \;
     chmod +x bin/mcs
     
-    # Run main setup with clean UI
-    if [ -f ./scripts/core/main-setup-clean.sh ] && [ "${USE_SIMPLE_UI:-0}" != "1" ]; then
-        # Debug logging
-        if [ "${DEBUG:-0}" = "1" ]; then
-            info "DEBUG: Terminal detection:"
-            echo "  stdin is terminal: $([ -t 0 ] && echo "yes" || echo "no")"
-            echo "  stdout is terminal: $([ -t 1 ] && echo "yes" || echo "no")"
-            echo "  NONINTERACTIVE env: ${NONINTERACTIVE:-not set}"
-            echo "  PS1: ${PS1:-not set}"
-            echo "  Running via curl: ${BASH_SOURCE[0]}"
-        fi
-        
-        # Always set NONINTERACTIVE when running through curl/wget
-        # Check if we're running from a pipe (curl | bash)
-        if [ -z "${PS1:-}" ] || [ ! -t 0 ] || [ ! -t 1 ] || [ "${NONINTERACTIVE:-0}" = "1" ]; then
-            export NONINTERACTIVE=1
-            [ "${DEBUG:-0}" = "1" ] && info "DEBUG: Setting NONINTERACTIVE=1"
-        fi
-        
-        # Create error log
-        ERROR_LOG="/tmp/mcs-install-error-$(date +%s).log"
-        
-        if ! ./scripts/core/main-setup-clean.sh 2>&1 | tee "$ERROR_LOG"; then
-            error "Setup failed during installation"
-            echo ""
-            echo "Error log saved to: $ERROR_LOG"
-            echo "Last 10 lines of error log:"
-            tail -10 "$ERROR_LOG"
-            echo ""
-            echo "You can try:"
-            echo "  1. Run with debug mode:"
-            echo "     DEBUG=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
-            echo ""
-            echo "  2. Run with simple UI:"
-            echo "     USE_SIMPLE_UI=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
-            echo ""
-            echo "  3. Force non-interactive mode:"
-            echo "     NONINTERACTIVE=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
-            exit 1
-        fi
-    else
+    # Run main setup - Homebrew style
+    if [ -f ./scripts/core/main-setup-homebrew.sh ]; then
+        ./scripts/core/main-setup-homebrew.sh || abort "Setup failed"
+    elif [ -f ./scripts/core/main-setup.sh ]; then
         ./scripts/core/main-setup.sh || abort "Setup failed"
+    else
+        abort "No setup script found"
     fi
     
     # Install key scripts to user's home
