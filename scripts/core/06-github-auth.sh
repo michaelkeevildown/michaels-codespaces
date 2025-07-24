@@ -117,11 +117,12 @@ else
         
         while true; do
             echo -e "${COLOR_BOLD}Paste your GitHub token:${COLOR_RESET}"
-            echo -e "${COLOR_GRAY}Tip: The token will be visible briefly, then hidden${COLOR_RESET}"
+            echo -e "${COLOR_GRAY}Tip: The token will be hidden as you type (like a password)${COLOR_RESET}"
             echo -n "> "
             
-            # Read token (visible while typing/pasting)
-            IFS= read -r GITHUB_TOKEN_INPUT
+            # Read token (hidden while typing/pasting)
+            IFS= read -rs GITHUB_TOKEN_INPUT
+            echo ""  # Add newline after hidden input
             
             # Trim any whitespace or newlines immediately
             GITHUB_TOKEN_INPUT=$(echo -n "$GITHUB_TOKEN_INPUT" | tr -d '[:space:]')
