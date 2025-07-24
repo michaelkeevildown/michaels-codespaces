@@ -5,7 +5,7 @@
 ### Installation
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/install.sh)"
 ```
 
 ### Create Your First Codespace
@@ -330,5 +330,5 @@ mcs help create
 mcs doctor
 
 # Report issues
-https://github.com/michaelkeevildown/ubuntu-codespace/issues
+https://github.com/michaelkeevildown/michaels-codespaces/issues
 ```

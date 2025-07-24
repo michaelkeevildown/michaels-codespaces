@@ -90,16 +90,16 @@ When developing new features or fixes, use a branch-based workflow:
 2. **Test installation from the branch on a VM**:
    ```bash
    # Use CODESPACE_BRANCH to specify your branch
-   CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/fix-installation-directories/install.sh)"
+   CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/fix-installation-directories/install.sh)"
    ```
 
 3. **Debug options for testing**:
    ```bash
    # Run with debug output
-   DEBUG=1 CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/fix-installation-directories/install.sh)"
+   DEBUG=1 CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/fix-installation-directories/install.sh)"
    
    # Force non-interactive mode
-   NONINTERACTIVE=1 CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/fix-installation-directories/install.sh)"
+   NONINTERACTIVE=1 CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/fix-installation-directories/install.sh)"
    ```
 
 4. **Clean up failed installations**:
@@ -122,12 +122,12 @@ When developing new features or fixes, use a branch-based workflow:
 
 **From main branch (default)**:
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/install.sh)"
 ```
 
 **From a specific branch**:
 ```bash
-CODESPACE_BRANCH=branch-name /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/branch-name/install.sh)"
+CODESPACE_BRANCH=branch-name /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/branch-name/install.sh)"
 ```
 
 ### Creating the Repository Setup Script

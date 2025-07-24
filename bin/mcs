@@ -564,7 +564,7 @@ ${tty_bold}Cleanup Options:${tty_reset}
   mcs cleanup            Removes MCS files but keeps Docker installed
   mcs destroy            Complete uninstall (requires typing 'DESTROY' to confirm)
 
-${tty_bold}More info:${tty_reset} https://github.com/michaelkeevildown/ubuntu-codespace
+${tty_bold}More info:${tty_reset} https://github.com/michaelkeevildown/michaels-codespaces
 EOF
 }
 

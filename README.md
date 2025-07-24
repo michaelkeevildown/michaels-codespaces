@@ -33,7 +33,7 @@ Your Ubuntu Server + Our Magic =
 Just like Homebrew, but for development environments:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/install.sh)"
 ```
 
 That's it! In about 2 minutes, you'll have a fully functional codespace platform. ☕
@@ -175,7 +175,7 @@ mcs update                                 # Update to latest version
 
 ```bash
 # 1. Install (2 minutes)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/install.sh)"
 
 # 2. Logout/login for Docker permissions
 exit
@@ -259,7 +259,7 @@ docker-compose up -d
 Found a bug? Want a feature? PRs welcome!
 
 ```bash
-mcs create git@github.com:michaelkeevildown/ubuntu-codespace.git
+mcs create git@github.com:michaelkeevildown/michaels-codespaces.git
 # Now you're developing Michael's Codespaces... in Michael's Codespaces! 🤯
 ```
 
@@ -272,9 +272,9 @@ MIT License - basically do whatever you want!
 <p align="center">
   <b>Built with ❤️ by developers who got tired of "works on my machine"</b>
   <br>
-  <a href="https://github.com/michaelkeevildown/ubuntu-codespace/issues">Report Bug</a>
+  <a href="https://github.com/michaelkeevildown/michaels-codespaces/issues">Report Bug</a>
   ·
-  <a href="https://github.com/michaelkeevildown/ubuntu-codespace/issues">Request Feature</a>
+  <a href="https://github.com/michaelkeevildown/michaels-codespaces/issues">Request Feature</a>
   ·
-  <a href="https://github.com/michaelkeevildown/ubuntu-codespace">Star on GitHub</a>
+  <a href="https://github.com/michaelkeevildown/michaels-codespaces">Star on GitHub</a>
 </p>

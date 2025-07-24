@@ -2,13 +2,13 @@
 
 # Michael's Codespaces Installer
 # This script is designed to be run directly via curl, like Homebrew
-# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/main/install.sh)"
+# Usage: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/install.sh)"
 
 set -e
 
 # Configuration
 CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.michaels-codespaces}"
-CODESPACE_REPO="https://github.com/michaelkeevildown/ubuntu-codespace.git"
+CODESPACE_REPO="https://github.com/michaelkeevildown/michaels-codespaces.git"
 CODESPACE_SCRIPTS="$HOME/codespaces"
 CODESPACE_BRANCH="${CODESPACE_BRANCH:-main}"
 
