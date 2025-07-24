@@ -141,13 +141,54 @@ EOF
 
 # Clone repository
 echo_info "Cloning repository..."
-if ! git clone "$REPO_URL" "$CODESPACE_DIR/src" 2>/dev/null; then
+
+# Check for GitHub token
+TOKEN_FILE="$HOME/codespaces/auth/tokens/github.token"
+if [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
+    GITHUB_TOKEN=$(cat "$TOKEN_FILE")
+    
+    # Convert SSH URL to HTTPS with token if needed
+    if [[ "$REPO_URL" =~ ^git@github\.com:(.+)$ ]]; then
+        REPO_PATH="${BASH_REMATCH[1]}"
+        CLONE_URL="https://${GITHUB_TOKEN}@github.com/${REPO_PATH}"
+        echo_debug "Using token authentication for GitHub"
+    elif [[ "$REPO_URL" =~ ^https://github\.com/(.+)$ ]]; then
+        REPO_PATH="${BASH_REMATCH[1]}"
+        CLONE_URL="https://${GITHUB_TOKEN}@github.com/${REPO_PATH}"
+        echo_debug "Using token authentication for GitHub"
+    else
+        # Non-GitHub URL, use as-is
+        CLONE_URL="$REPO_URL"
+    fi
+else
+    # No token, try clone as-is (will work for public repos or if SSH is set up)
+    CLONE_URL="$REPO_URL"
+    echo_debug "No GitHub token found, using default authentication"
+fi
+
+# Clone with progress
+if ! git clone "$CLONE_URL" "$CODESPACE_DIR/src" 2>&1 | while IFS= read -r line; do
+    if [[ "$line" =~ "Receiving objects" ]] || [[ "$line" =~ "Resolving deltas" ]]; then
+        echo_status "$line"
+    fi
+done; then
+    clear_status
     echo_error "Failed to clone repository. Please check:"
     echo "  - Repository URL is correct"
     echo "  - You have access to the repository"
-    echo "  - SSH keys are configured (run: ~/codespaces/shared/scripts/setup-github-auth.sh)"
+    echo "  - GitHub token is set (see: ~/codespaces/auth/tokens/README.md)"
     rm -rf "$CODESPACE_DIR"
     exit 1
+fi
+
+clear_status
+
+# Remove token from git config in the cloned repo for security
+if [ -d "$CODESPACE_DIR/src/.git" ]; then
+    cd "$CODESPACE_DIR/src"
+    # Set the remote URL without the token
+    git remote set-url origin "$REPO_URL"
+    cd - > /dev/null
 fi
 
 # Create README for the codespace

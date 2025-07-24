@@ -480,15 +480,18 @@ cmd_doctor() {
     fi
     
     # Check GitHub auth
-    printf "GitHub SSH: "
-    if [ -f ~/.ssh/known_hosts ] && grep -q "github.com" ~/.ssh/known_hosts; then
-        if ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-            printf "${tty_green}✓${tty_reset} authenticated\n"
+    printf "GitHub Token: "
+    if [ -f "$CODESPACES_DIR/auth/tokens/github.token" ] && [ -s "$CODESPACES_DIR/auth/tokens/github.token" ]; then
+        # Verify token is valid format (starts with ghp_ and is right length)
+        token=$(head -n1 "$CODESPACES_DIR/auth/tokens/github.token" 2>/dev/null)
+        if [[ "$token" =~ ^ghp_[a-zA-Z0-9]{36}$ ]]; then
+            printf "${tty_green}✓${tty_reset} configured\n"
         else
-            printf "${tty_yellow}⚠${tty_reset}  key not added to GitHub account\n"
+            printf "${tty_yellow}⚠${tty_reset}  invalid format\n"
         fi
     else
-        printf "${tty_yellow}⚠${tty_reset}  not configured (run setup-github-auth.sh)\n"
+        printf "${tty_red}✗${tty_reset} not configured\n"
+        printf "  ${tty_dim}→ See: ~/codespaces/auth/tokens/README.md${tty_reset}\n"
     fi
 }
 
