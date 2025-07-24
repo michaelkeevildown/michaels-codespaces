@@ -80,8 +80,6 @@ EOF
 
 # Docker compose template
 cat > "$HOME/codespaces/shared/templates/docker-compose.template.yml" << 'EOF'
-version: '3.8'
-
 services:
   {{SAFE_REPO_NAME}}-dev:
     image: codercom/code-server:latest
