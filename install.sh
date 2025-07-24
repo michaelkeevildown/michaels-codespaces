@@ -62,6 +62,9 @@ command_exists() {
 
 # Main installation
 main() {
+    # Ensure we're in a valid directory
+    cd "$HOME" 2>/dev/null || cd /tmp || abort "Cannot find a valid working directory"
+    
     # Banner with box drawing
     printf "\n${tty_bold}┌────────────────────────────────────┐${tty_reset}\n"
     printf "${tty_bold}│  Michael's Codespaces Installer    │${tty_reset}\n"
