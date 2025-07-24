@@ -84,6 +84,9 @@ else
             read -s GITHUB_TOKEN_INPUT
             echo ""
             
+            # Trim any whitespace or newlines
+            GITHUB_TOKEN_INPUT=$(echo -n "$GITHUB_TOKEN_INPUT" | tr -d '[:space:]')
+            
             if [ -z "$GITHUB_TOKEN_INPUT" ]; then
                 echo_warning "Token is required for creating codespaces."
                 echo ""
@@ -107,8 +110,19 @@ else
             # Validate token format
             if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
                 echo_debug "Token format validation..."
-                echo_debug "Token length: ${#GITHUB_TOKEN_INPUT}"
-                echo_debug "Token prefix: ${GITHUB_TOKEN_INPUT:0:4}..."
+                echo_debug "Token length: ${#GITHUB_TOKEN_INPUT} (expected: 40)"
+                echo_debug "Token prefix: '${GITHUB_TOKEN_INPUT:0:4}' (expected: 'ghp_')"
+                echo_debug "Token suffix: '...${GITHUB_TOKEN_INPUT: -4}'"
+                echo_debug "Token sample: ${GITHUB_TOKEN_INPUT:0:10}...${GITHUB_TOKEN_INPUT: -10}"
+                
+                # Check specific issues
+                if [[ ! "$GITHUB_TOKEN_INPUT" =~ ^ghp_ ]]; then
+                    echo_debug "ERROR: Token doesn't start with 'ghp_'"
+                elif [[ ${#GITHUB_TOKEN_INPUT} -ne 40 ]]; then
+                    echo_debug "ERROR: Token length is ${#GITHUB_TOKEN_INPUT}, not 40"
+                elif [[ ! "$GITHUB_TOKEN_INPUT" =~ ^ghp_[a-zA-Z0-9]+$ ]]; then
+                    echo_debug "ERROR: Token contains invalid characters"
+                fi
             fi
             
             if [[ "$GITHUB_TOKEN_INPUT" =~ ^ghp_[a-zA-Z0-9]{36}$ ]]; then
@@ -219,6 +233,16 @@ else
             else
                 echo_error "Invalid token format. GitHub tokens start with 'ghp_' followed by 36 characters."
                 echo_info "Example: ghp_A1b2C3d4E5f6G7h8I9j0K1L2M3N4O5P6Q7R8"
+                
+                if [[ "${DEBUG:-0}" != "1" && "${VERBOSE:-0}" != "1" ]]; then
+                    echo ""
+                    echo_info "Run with DEBUG=1 to see what's wrong with your token format"
+                fi
+                
+                echo ""
+                echo_info "Alternative: Save your token to a file and run:"
+                echo "  echo 'YOUR_TOKEN' > ~/codespaces/auth/tokens/github.token"
+                echo "  chmod 600 ~/codespaces/auth/tokens/github.token"
                 echo ""
                 continue
             fi
