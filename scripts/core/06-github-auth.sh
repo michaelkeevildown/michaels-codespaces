@@ -80,12 +80,23 @@ else
         echo ""
         
         while true; do
-            echo -n "Paste your GitHub token here: "
-            read -s GITHUB_TOKEN_INPUT
-            echo ""
+            echo -e "${COLOR_BOLD}Paste your GitHub token:${COLOR_RESET}"
+            echo -e "${COLOR_GRAY}Tip: The token will be visible briefly, then hidden${COLOR_RESET}"
+            echo -n "> "
             
-            # Trim any whitespace or newlines
+            # Read token (visible while typing/pasting)
+            IFS= read -r GITHUB_TOKEN_INPUT
+            
+            # Trim any whitespace or newlines immediately
             GITHUB_TOKEN_INPUT=$(echo -n "$GITHUB_TOKEN_INPUT" | tr -d '[:space:]')
+            
+            # Show what we captured (masked)
+            if [ -n "$GITHUB_TOKEN_INPUT" ]; then
+                # Create masked version showing first 7 and last 3 chars
+                masked_token="${GITHUB_TOKEN_INPUT:0:7}********************************${GITHUB_TOKEN_INPUT: -3}"
+                echo -e "\n${COLOR_GREEN}✓${COLOR_RESET} Token captured: $masked_token"
+                echo -e "  Length: ${#GITHUB_TOKEN_INPUT} characters"
+            fi
             
             if [ -z "$GITHUB_TOKEN_INPUT" ]; then
                 echo_warning "Token is required for creating codespaces."
