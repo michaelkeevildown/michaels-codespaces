@@ -234,6 +234,10 @@ create_codespace() {
     if [ -d "$CODESPACE_DIR" ] && [ "$FORCE" == "true" ]; then
         echo_warning "Removing existing codespace..."
         log_info "Force flag enabled, removing existing codespace"
+        
+        # Change to a safe directory first to avoid "current working directory" errors
+        cd "$HOME" || cd /tmp
+        
         if [ -f "$CODESPACE_DIR/docker-compose.yml" ]; then
             log_command "docker-compose -f \"$CODESPACE_DIR/docker-compose.yml\" down" "Stopping existing containers"
         fi
