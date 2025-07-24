@@ -31,4 +31,7 @@ echo ""
 "$SCRIPT_DIR/05-monitoring-tools.sh"
 echo ""
 
+"$SCRIPT_DIR/06-github-auth.sh"
+echo ""
+
 echo_success "✅ Main setup completed successfully!"

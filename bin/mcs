@@ -481,8 +481,12 @@ cmd_doctor() {
     
     # Check GitHub auth
     printf "GitHub SSH: "
-    if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-        printf "${tty_green}✓${tty_reset} authenticated\n"
+    if [ -f ~/.ssh/known_hosts ] && grep -q "github.com" ~/.ssh/known_hosts; then
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+            printf "${tty_green}✓${tty_reset} authenticated\n"
+        else
+            printf "${tty_yellow}⚠${tty_reset}  key not added to GitHub account\n"
+        fi
     else
         printf "${tty_yellow}⚠${tty_reset}  not configured (run setup-github-auth.sh)\n"
     fi
