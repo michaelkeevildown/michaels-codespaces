@@ -21,6 +21,8 @@ DIRECTORIES=(
     "$HOME/codespaces/auth/tokens"
     "$HOME/codespaces/auth/git-config"
     "$HOME/codespaces/backups"
+    "$HOME/codespaces/scripts"
+    "$HOME/codespaces/scripts/utils"
 )
 
 for dir in "${DIRECTORIES[@]}"; do

@@ -138,6 +138,7 @@ EOF
 chmod +x "$HOME/monitor-system.sh"
 
 # List codespaces utility
+mkdir -p "$HOME/codespaces/scripts/utils"
 cat > "$HOME/codespaces/scripts/utils/list-codespaces.sh" << 'EOF'
 #!/bin/bash
 
@@ -178,6 +179,7 @@ EOF
 chmod +x "$HOME/codespaces/scripts/utils/list-codespaces.sh"
 
 # Create manage-all script
+mkdir -p "$HOME/codespaces/scripts/utils"
 cat > "$HOME/codespaces/scripts/utils/manage-all.sh" << 'EOF'
 #!/bin/bash
 
