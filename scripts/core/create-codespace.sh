@@ -300,15 +300,39 @@ create_codespace() {
         done
     else
         # Auto-allocate ports
+        log_info "Auto-allocating ports for codespace: $SAFE_NAME"
         local allocated=$(allocate_codespace_ports "$SAFE_NAME" 2)
+        log_debug "Port allocation result: '$allocated'"
+        
         if [ -z "$allocated" ]; then
+            log_error "Port allocation returned empty result"
             echo_error "Failed to allocate ports"
             rm -rf "$CODESPACE_DIR"
             exit 1
         fi
+        
         local vs_code_port=$(echo "$allocated" | cut -d' ' -f1)
         local app_port=$(echo "$allocated" | cut -d' ' -f2)
+        
+        log_debug "Extracted ports - VS Code: '$vs_code_port', App: '$app_port'"
+        
+        # Validate that ports are valid numbers
+        if [[ ! "$vs_code_port" =~ ^[0-9]+$ ]] || [ -z "$vs_code_port" ]; then
+            log_error "Invalid VS Code port: '$vs_code_port'"
+            echo_error "Failed to allocate valid VS Code port"
+            vs_code_port="8080"
+            log_info "Using fallback VS Code port: $vs_code_port"
+        fi
+        
+        if [[ ! "$app_port" =~ ^[0-9]+$ ]] || [ -z "$app_port" ]; then
+            log_error "Invalid app port: '$app_port'"
+            echo_error "Failed to allocate valid app port"
+            app_port="3000"
+            log_info "Using fallback app port: $app_port"
+        fi
+        
         ports="${vs_code_port}:8080,${app_port}:3000"
+        log_info "Final port configuration: $ports"
     fi
     
     echo_debug "Port configuration: $ports"

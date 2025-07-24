@@ -142,37 +142,61 @@ allocate_codespace_ports() {
     local num_ports="${2:-2}"
     local base_port="${3:-8080}"
     
+    # Source logging if available (fallback to echo_debug)
+    if ! command -v log_debug >/dev/null 2>&1; then
+        log_debug() { [ "${DEBUG:-0}" -eq 1 ] && echo "🔍 PORT: $1" >&2; }
+        log_info() { echo "ℹ️  PORT: $1" >&2; }
+        log_error() { echo "❌ PORT: $1" >&2; }
+    fi
+    
+    log_info "Allocating $num_ports ports for $codespace_name (base: $base_port)"
+    
     local allocated_ports=""
     local port_offset=0
     
     # Allocate VS Code port
+    log_debug "Finding VS Code port in range $base_port-$((base_port + 100))"
     local vs_code_port=$(find_available_port $base_port $((base_port + 100)))
+    log_debug "VS Code port allocation result: '$vs_code_port'"
+    
     if [ -z "$vs_code_port" ]; then
+        log_error "Failed to find available VS Code port in range $base_port-$((base_port + 100))"
         echo_error "Failed to find available VS Code port"
         return 1
     fi
+    
+    log_info "Allocated VS Code port: $vs_code_port"
     register_port "$vs_code_port" "$codespace_name" "vscode"
     allocated_ports="$vs_code_port"
     
     # Allocate additional ports
     if [ $num_ports -gt 1 ]; then
         local app_base=$((base_port < 7000 ? 7680 : base_port + 1000))
+        log_debug "App ports base range: $app_base-$((app_base + 100))"
         
         for i in $(seq 2 $num_ports); do
+            log_debug "Finding app port $((i-1)) in range $app_base-$((app_base + 100)), excluding: $allocated_ports"
             local app_port=$(find_available_port $app_base $((app_base + 100)) "$allocated_ports")
+            log_debug "App port $((i-1)) allocation result: '$app_port'"
+            
             if [ -z "$app_port" ]; then
+                log_error "Failed to find available port for service $i in range $app_base-$((app_base + 100))"
                 echo_error "Failed to find available port for service $i"
                 # Rollback allocations
                 for port in $allocated_ports; do
+                    log_debug "Rolling back port: $port"
                     unregister_port "$port"
                 done
                 return 1
             fi
+            
+            log_info "Allocated app port $((i-1)): $app_port"
             register_port "$app_port" "$codespace_name" "app$((i-1))"
             allocated_ports="$allocated_ports $app_port"
         done
     fi
     
+    log_info "Final allocated ports: $allocated_ports"
     echo "$allocated_ports"
 }
 
