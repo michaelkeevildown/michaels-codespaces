@@ -8,7 +8,12 @@ set -e
 # Configuration
 CODESPACES_DIR="$HOME/codespaces"
 CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.michaels-codespaces}"
-SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace.sh"
+# Use v2 if available, fallback to v1
+if [ -f "$CODESPACE_HOME/scripts/core/create-codespace-v2.sh" ]; then
+    SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace-v2.sh"
+else
+    SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace.sh"
+fi
 VERSION="1.0.0"
 
 # Colors
@@ -55,7 +60,8 @@ get_safe_name() {
 # Commands
 cmd_create() {
     if [ -z "$1" ]; then
-        error "Usage: mcs create <repository-url>"
+        error "Usage: mcs create <repository-url> [options]"
+        echo "Run 'mcs help create' for detailed options"
         exit 1
     fi
     
@@ -65,8 +71,8 @@ cmd_create() {
         exit 1
     fi
     
-    info "Creating codespace for $1"
-    "$SETUP_SCRIPT" "$1"
+    # Pass all arguments to the create script
+    "$SETUP_SCRIPT" "$@"
 }
 
 cmd_list() {
@@ -495,7 +501,37 @@ cmd_doctor() {
     fi
 }
 
+cmd_help_create() {
+    cat << EOF
+${tty_bold}mcs create - Create a new codespace${tty_reset}
+
+${tty_bold}Usage:${tty_reset} mcs create <repository-url> [options]
+
+${tty_bold}Options:${tty_reset}
+  --name <name>      Custom codespace name (default: auto-generated)
+  --image <image>    Docker image to use
+  --language <lang>  Language preset (node, python, go, rust, java)
+  --ports <ports>    Port mappings (format: "8080:8080,3000:3000")
+  --env-file <file>  Environment variables file
+  --no-start         Don't start the container after creation
+  --force            Overwrite existing codespace
+  --debug            Enable debug output
+
+${tty_bold}Examples:${tty_reset}
+  mcs create git@github.com:facebook/react.git
+  mcs create https://github.com/nodejs/node.git --language node
+  mcs create git@github.com:user/repo.git --name my-project --ports "8090:8080"
+  mcs create git@github.com:user/repo.git --image python:3.11 --env-file .env
+
+EOF
+}
+
 cmd_help() {
+    if [ "$1" == "create" ]; then
+        cmd_help_create
+        return
+    fi
+    
     cat << EOF
 ${tty_bold}Michael's Codespaces (mcs) v${VERSION}${tty_reset}
 

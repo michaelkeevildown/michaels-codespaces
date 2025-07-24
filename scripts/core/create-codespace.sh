@@ -19,15 +19,76 @@ fi
 
 # Check arguments
 if [ $# -eq 0 ]; then
-    echo_error "Usage: $0 <git-repository-url>"
+    echo_error "Usage: $0 <git-repository-url> [options]"
     echo ""
     echo "Examples:"
     echo "  $0 git@github.com:user/repo.git"
     echo "  $0 https://github.com/user/repo.git"
+    echo "  $0 https://github.com/user/repo.git --image node:18"
+    echo "  $0 git@github.com:user/repo.git --ports 8090:8080,3001:3000"
+    echo ""
+    echo "Options:"
+    echo "  --image <image>    Use custom Docker image (default: codercom/code-server:latest)"
+    echo "  --ports <mapping>  Custom port mappings (format: host:container,host:container)"
+    echo "  --env <file>       Path to environment file to load"
     exit 1
 fi
 
 REPO_URL="$1"
+shift
+
+# Parse optional arguments
+CUSTOM_IMAGE=""
+CUSTOM_PORTS=""
+ENV_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --image)
+            CUSTOM_IMAGE="$2"
+            shift 2
+            ;;
+        --ports)
+            CUSTOM_PORTS="$2"
+            shift 2
+            ;;
+        --env)
+            ENV_FILE="$2"
+            shift 2
+            ;;
+        *)
+            echo_error "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate repository URL
+validate_repo_url() {
+    local url="$1"
+    
+    # Check for common Git URL patterns
+    if [[ "$url" =~ ^git@.*:.*\.git$ ]] || 
+       [[ "$url" =~ ^https?://.*\.git$ ]] || 
+       [[ "$url" =~ ^git://.*\.git$ ]] ||
+       [[ "$url" =~ ^ssh://.*\.git$ ]] ||
+       [[ "$url" =~ ^https://github\.com/[^/]+/[^/]+$ ]] ||
+       [[ "$url" =~ ^https://gitlab\.com/[^/]+/[^/]+$ ]] ||
+       [[ "$url" =~ ^https://bitbucket\.org/[^/]+/[^/]+$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+if ! validate_repo_url "$REPO_URL"; then
+    echo_error "Invalid repository URL format: $REPO_URL"
+    echo "Expected formats:"
+    echo "  - git@github.com:user/repo.git"
+    echo "  - https://github.com/user/repo.git"
+    echo "  - https://github.com/user/repo (GitHub/GitLab/Bitbucket)"
+    exit 1
+fi
 
 # Extract repository name from URL
 REPO_NAME=$(basename "$REPO_URL" .git)
@@ -54,32 +115,71 @@ if [ -d "$CODESPACE_DIR" ]; then
     exit 1
 fi
 
-# Find available ports
-echo_info "Finding available ports..."
-VS_CODE_PORT=8080
-APP_PORT=7680
+# Enhanced port management
+find_available_port() {
+    local start_port=$1
+    local max_port=$((start_port + 100))
+    local port=$start_port
+    
+    while [ $port -le $max_port ]; do
+        if ! netstat -tuln 2>/dev/null | grep -q ":$port " && 
+           ! lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+            echo $port
+            return 0
+        fi
+        ((port++))
+    done
+    
+    echo_error "No available ports found in range $start_port-$max_port"
+    return 1
+}
 
-# Find next available VS Code port
-while netstat -tuln 2>/dev/null | grep -q ":$VS_CODE_PORT "; do
-    ((VS_CODE_PORT++))
-done
-
-# Find next available app port
-while netstat -tuln 2>/dev/null | grep -q ":$APP_PORT "; do
-    ((APP_PORT++))
-done
+# Port allocation with custom ports support
+if [ -n "$CUSTOM_PORTS" ]; then
+    echo_info "Using custom port mappings: $CUSTOM_PORTS"
+    # Parse custom ports later in docker-compose generation
+    VS_CODE_PORT=$(echo "$CUSTOM_PORTS" | cut -d',' -f1 | cut -d':' -f1)
+    APP_PORT=$(echo "$CUSTOM_PORTS" | cut -d',' -f2 | cut -d':' -f1 || echo "7680")
+else
+    echo_info "Finding available ports..."
+    VS_CODE_PORT=$(find_available_port 8080)
+    if [ $? -ne 0 ]; then
+        echo_error "Failed to find available VS Code port"
+        exit 1
+    fi
+    
+    APP_PORT=$(find_available_port 7680)
+    if [ $? -ne 0 ]; then
+        echo_error "Failed to find available app port"
+        exit 1
+    fi
+fi
 
 echo "  VS Code Port: $VS_CODE_PORT"
 echo "  App Port: $APP_PORT"
 
-# Create codespace directory structure
+# Create codespace directory structure with error handling
 echo_info "Creating codespace structure..."
-mkdir -p "$CODESPACE_DIR"/{src,data,config}
+if ! mkdir -p "$CODESPACE_DIR"/{src,data,config,logs}; then
+    echo_error "Failed to create codespace directory structure"
+    exit 1
+fi
 
-# Generate secure password
-PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-16)
+# Check for .devcontainer.json in the repository (will check after clone)
+DEVCONTAINER_IMAGE=""
 
-# Create environment file
+# Generate secure password with fallback
+if command -v openssl >/dev/null 2>&1; then
+    PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-16)
+else
+    # Fallback to /dev/urandom
+    PASSWORD=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
+fi
+
+# Use custom image if provided, otherwise default
+DOCKER_IMAGE=${CUSTOM_IMAGE:-"codercom/code-server:latest"}
+
+# Create environment file with enhanced configuration
 echo_info "Creating configuration..."
 cat > "$CODESPACE_DIR/.env" << EOF
 # Codespace Configuration
@@ -89,6 +189,7 @@ CONTAINER_NAME=$SAFE_REPO_NAME-dev
 VS_CODE_PORT=$VS_CODE_PORT
 APP_PORT=$APP_PORT
 PASSWORD=$PASSWORD
+DOCKER_IMAGE=$DOCKER_IMAGE
 CREATED=$(date +%Y-%m-%d)
 
 # User Configuration
@@ -96,14 +197,33 @@ USER=$USER
 TZ=$(timedatectl show -p Timezone --value 2>/dev/null || echo "UTC")
 EOF
 
-# Create docker-compose.yml from template
+# Append custom environment variables if env file provided
+if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+    echo "" >> "$CODESPACE_DIR/.env"
+    echo "# Custom Environment Variables" >> "$CODESPACE_DIR/.env"
+    cat "$ENV_FILE" >> "$CODESPACE_DIR/.env"
+fi
+
+# Create docker-compose.yml with enhanced configuration
 echo_info "Creating Docker configuration..."
+
+# Generate port mappings
+if [ -n "$CUSTOM_PORTS" ]; then
+    PORT_MAPPINGS=""
+    IFS=',' read -ra PORTS <<< "$CUSTOM_PORTS"
+    for port in "${PORTS[@]}"; do
+        PORT_MAPPINGS="$PORT_MAPPINGS\n      - \"$port\""
+    done
+else
+    PORT_MAPPINGS="\n      - \"${VS_CODE_PORT}:8080\"\n      - \"${APP_PORT}:3000\""
+fi
+
 cat > "$CODESPACE_DIR/docker-compose.yml" << EOF
 version: '3.8'
 
 services:
   ${SAFE_REPO_NAME}-dev:
-    image: codercom/code-server:latest
+    image: ${DOCKER_IMAGE}
     container_name: ${SAFE_REPO_NAME}-dev
     restart: unless-stopped
     environment:
@@ -112,13 +232,12 @@ services:
       - DOCKER_USER=\${USER}
       - GIT_AUTHOR_NAME=\$(cat ~/codespaces/auth/git-config/name 2>/dev/null || echo '')
       - GIT_AUTHOR_EMAIL=\$(cat ~/codespaces/auth/git-config/email 2>/dev/null || echo '')
-    ports:
-      - "${VS_CODE_PORT}:8080"
-      - "${APP_PORT}:3000"
+    ports:${PORT_MAPPINGS}
     volumes:
       - ./src:/home/coder/project
       - ./data:/home/coder/.local/share/code-server
       - ./config:/home/coder/.config
+      - ./logs:/home/coder/logs
       - \${HOME}/.ssh:/home/coder/.ssh:ro
       - \${HOME}/codespaces/auth/tokens:/home/coder/.tokens:ro
     networks:
@@ -126,12 +245,19 @@ services:
     labels:
       - "codespace.repo=${REPO_NAME}"
       - "codespace.created=$(date +%Y-%m-%d)"
+      - "codespace.image=${DOCKER_IMAGE}"
     command: >
       sh -c "
         git config --global user.name '\$(cat /home/coder/.ssh/../codespaces/auth/git-config/name 2>/dev/null || echo '')' &&
         git config --global user.email '\$(cat /home/coder/.ssh/../codespaces/auth/git-config/email 2>/dev/null || echo '')' &&
         code-server --bind-addr 0.0.0.0:8080 --auth password
       "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   codespace-network:
