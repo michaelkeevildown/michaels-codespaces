@@ -40,11 +40,24 @@ if [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
         if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
             echo_debug "Token loaded: ${token:0:7}...${token: -3}"
         fi
-        if username=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $token" https://api.github.com/user | grep '"login"' | cut -d'"' -f4 2>/dev/null); then
-            printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
+        # Create temp file for response
+        temp_response=$(mktemp /tmp/github-verify-XXXXXX)
+        http_code=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $token" -H "Accept: application/vnd.github.v3+json" -w "%{http_code}" -o "$temp_response" https://api.github.com/user 2>&1)
+        http_code=$(echo -n "$http_code" | tr -d '[:space:]' | tr -d '[:cntrl:]')
+        
+        if [[ "$http_code" == "200" ]]; then
+            if command -v jq >/dev/null 2>&1; then
+                username=$(jq -r '.login' < "$temp_response" 2>/dev/null)
+            else
+                username=$(grep -o '"login":"[^"]*"' < "$temp_response" | cut -d'"' -f4 2>/dev/null)
+            fi
+            if [[ -n "$username" ]]; then
+                printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
+            fi
         else
             echo_warning "Token found but verification failed. You may need to update it."
         fi
+        rm -f "$temp_response"
     fi
 else
     # Check environment variable first
@@ -54,9 +67,21 @@ else
         chmod 600 "$TOKEN_FILE"
         echo_success "GitHub token saved from environment"
         # Verify it works
-        if username=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | grep '"login"' | cut -d'"' -f4 2>/dev/null); then
-            printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
+        temp_response=$(mktemp /tmp/github-verify-env-XXXXXX)
+        http_code=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3+json" -w "%{http_code}" -o "$temp_response" https://api.github.com/user 2>&1)
+        http_code=$(echo -n "$http_code" | tr -d '[:space:]' | tr -d '[:cntrl:]')
+        
+        if [[ "$http_code" == "200" ]]; then
+            if command -v jq >/dev/null 2>&1; then
+                username=$(jq -r '.login' < "$temp_response" 2>/dev/null)
+            else
+                username=$(grep -o '"login":"[^"]*"' < "$temp_response" | cut -d'"' -f4 2>/dev/null)
+            fi
+            if [[ -n "$username" ]]; then
+                printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
+            fi
         fi
+        rm -f "$temp_response"
     else
         # Interactive token setup
         echo_box "GitHub Personal Access Token Setup" 50
@@ -176,10 +201,7 @@ else
                 sleep 0.1
                 
                 # Test the token
-                # Set up trap to ensure spinner stops
-                trap 'stop_spinner' EXIT INT TERM
-                
-                start_spinner "Verifying token with GitHub"
+                echo_info "Verifying token with GitHub..."
                 
                 # Debug: Show what we're about to do
                 if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
@@ -187,34 +209,36 @@ else
                     echo_debug "Token format: ${GITHUB_TOKEN_INPUT:0:7}...${GITHUB_TOKEN_INPUT: -4}"
                 fi
                 
-                # Make API call with timeout
-                response=$(curl -s --max-time 10 --connect-timeout 5 \
+                # Make API call with timeout - use separate variables for response and status
+                # Create temp file for response body
+                response_file=$(mktemp /tmp/github-auth-response.XXXXXX)
+                
+                # Make the API call and capture HTTP status code
+                # Note: We don't use spinner here to avoid interfering with curl output
+                http_code_raw=$(curl -s --max-time 10 --connect-timeout 5 \
                     -H "Authorization: token $GITHUB_TOKEN_INPUT" \
                     -H "Accept: application/vnd.github.v3+json" \
-                    -w "\n%{http_code}" \
+                    -w "%{http_code}" \
+                    -o "$response_file" \
                     https://api.github.com/user 2>&1)
+                
+                # Clean the HTTP code - remove any whitespace, newlines, or control characters
+                http_code=$(echo -n "$http_code_raw" | tr -d '[:space:]' | tr -d '[:cntrl:]')
+                
+                # Read the JSON response from file
+                json_response=$(cat "$response_file" 2>/dev/null || echo "{}")
                 
                 # Debug: Show raw response
                 if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
-                    echo_debug "Raw response length: ${#response} characters"
-                    echo_debug "Last 50 chars of response: '${response: -50}'"
-                    echo_debug "Response contains newlines: $(echo "$response" | wc -l) lines"
+                    echo_debug "Raw HTTP status code: '$http_code_raw' (length: ${#http_code_raw})"
+                    echo_debug "Cleaned HTTP status code: '$http_code' (length: ${#http_code})"
+                    echo_debug "Response file: $response_file"
+                    echo_debug "Response length: ${#json_response} characters"
+                    echo_debug "First 100 chars of response: '${json_response:0:100}'"
                 fi
                 
-                # Extract HTTP status code (last line)
-                http_code=$(echo "$response" | tail -n1)
-                # Extract JSON response (everything except last line)
-                json_response=$(echo "$response" | sed '$d')
-                
-                # Debug: Show what we extracted
-                if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
-                    echo_debug "Extracted HTTP code: '$http_code' (length: ${#http_code})"
-                    echo_debug "HTTP code bytes: $(echo -n "$http_code" | od -An -tx1)"
-                    echo_debug "JSON response first 100 chars: '${json_response:0:100}'"
-                fi
-                
-                stop_spinner
-                trap - EXIT INT TERM  # Remove trap
+                # Clean up temp file
+                rm -f "$response_file"
                 
                 # Debug: Show comparison
                 if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
@@ -258,8 +282,19 @@ else
                     rm -f "$TOKEN_FILE"
                     echo ""
                     continue
-                elif [[ "$http_code" == "000" ]]; then
+                elif [[ "$http_code" == "000" ]] || [[ -z "$http_code" ]]; then
                     echo_error "Token verification failed: Connection timeout or network error"
+                    
+                    # Additional debugging for connection issues
+                    if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                        echo_debug "Attempting direct connection test..."
+                        if curl -s --max-time 5 --connect-timeout 3 https://api.github.com/zen >/dev/null 2>&1; then
+                            echo_debug "GitHub API is reachable"
+                        else
+                            echo_debug "Cannot reach GitHub API"
+                        fi
+                    fi
+                    
                     echo_info "Please check your internet connection and try again"
                     echo_info "Token saved but not verified. Retry or continue with setup."
                     echo ""
@@ -267,7 +302,8 @@ else
                     read -p "Retry verification? [Y/n] " -n 1 -r
                     echo ""
                     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                        # Retry the verification
+                        # Add small delay before retry to avoid rate limiting
+                        sleep 1
                         continue
                     else
                         # Accept the token even though we couldn't verify it
