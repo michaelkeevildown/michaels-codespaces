@@ -157,7 +157,31 @@ validate_inputs() {
     # Check if already exists
     if [ -d "$CODESPACE_DIR" ] && [ "$FORCE" != "true" ]; then
         echo_error "Codespace '$SAFE_NAME' already exists!"
-        echo "Use --force to overwrite or choose a different name with --name"
+        echo "Directory: $CODESPACE_DIR"
+        echo ""
+        
+        # Check container status if container management is available
+        if command -v get_container_status >/dev/null 2>&1; then
+            local status=$(get_container_status "$CODESPACE_DIR")
+            case "$status" in
+                "running")
+                    echo_info "Status: Container is currently running"
+                    ;;
+                "stopped")
+                    echo_warning "Status: Container exists but is stopped"
+                    ;;
+                "not-found")
+                    echo_warning "Status: Directory exists but no container configuration found"
+                    ;;
+            esac
+            echo ""
+        fi
+        
+        echo "Options:"
+        echo "  • Use --force to remove and recreate: mcs create --force $REPO_URL"
+        echo "  • Choose a different name: mcs create --name <new-name> $REPO_URL"
+        echo "  • Remove manually: mcs remove $SAFE_NAME"
+        echo "  • View existing codespaces: mcs list"
         exit 1
     fi
 }
