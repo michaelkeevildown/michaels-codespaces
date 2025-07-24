@@ -1,0 +1,423 @@
+#!/bin/bash
+
+# Michael's Codespaces CLI
+# A brew-like command for managing codespaces
+
+set -e
+
+# Configuration
+CODESPACES_DIR="$HOME/codespaces"
+CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.ubuntu-codespace}"
+SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace.sh"
+VERSION="1.0.0"
+
+# Colors
+if [[ -t 1 ]]; then
+    tty_red=$(printf '\033[31m')
+    tty_green=$(printf '\033[32m')
+    tty_yellow=$(printf '\033[33m')
+    tty_blue=$(printf '\033[34m')
+    tty_purple=$(printf '\033[35m')
+    tty_cyan=$(printf '\033[36m')
+    tty_bold=$(printf '\033[1m')
+    tty_reset=$(printf '\033[0m')
+else
+    tty_red='' tty_green='' tty_yellow='' tty_blue=''
+    tty_purple='' tty_cyan='' tty_bold='' tty_reset=''
+fi
+
+# Helper functions
+info() {
+    printf "${tty_blue}==>${tty_reset} ${tty_bold}%s${tty_reset}\n" "$1"
+}
+
+success() {
+    printf "${tty_green}✓${tty_reset} %s\n" "$1"
+}
+
+warning() {
+    printf "${tty_yellow}⚠${tty_reset}  %s\n" "$1"
+}
+
+error() {
+    printf "${tty_red}✗${tty_reset} %s\n" "$1" >&2
+}
+
+# Get safe repo name from URL
+get_safe_name() {
+    local repo_url="$1"
+    local repo_name=$(basename "$repo_url" .git)
+    local repo_owner=$(echo "$repo_url" | sed -E 's/.*[:/]([^/]+)\/[^/]+$/\1/')
+    local full_name="${repo_owner}-${repo_name}"
+    echo "$full_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g'
+}
+
+# Commands
+cmd_create() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs create <repository-url>"
+        exit 1
+    fi
+    
+    if [ ! -f "$SETUP_SCRIPT" ]; then
+        error "Create script not found. Is Michael's Codespaces installed correctly?"
+        error "Try running: mcs doctor"
+        exit 1
+    fi
+    
+    info "Creating codespace for $1"
+    "$SETUP_SCRIPT" "$1"
+}
+
+cmd_list() {
+    printf "${tty_bold}Codespaces:${tty_reset}\n"
+    printf "${tty_cyan}%-30s %-10s %-30s${tty_reset}\n" "NAME" "STATUS" "URL"
+    printf "%-30s %-10s %-30s\n" "----" "------" "---"
+    
+    local found=0
+    for dir in "$CODESPACES_DIR"/*/; do
+        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
+            local basename=$(basename "$dir")
+            if [[ ! "$basename" =~ ^(shared|auth|backups|scripts)$ ]]; then
+                found=1
+                
+                if [ -f "$dir/.env" ]; then
+                    local vs_code_port=$(grep "VS_CODE_PORT=" "$dir/.env" | cut -d'=' -f2)
+                    local container_name="${basename}-dev"
+                    
+                    # Check if running
+                    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
+                        printf "${tty_green}%-30s${tty_reset} %-10s %-30s\n" \
+                            "$basename" "running" "http://localhost:$vs_code_port"
+                    else
+                        printf "%-30s ${tty_yellow}%-10s${tty_reset} %-30s\n" \
+                            "$basename" "stopped" "port $vs_code_port"
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    if [ $found -eq 0 ]; then
+        warning "No codespaces found. Create one with: mcs create <repo-url>"
+    fi
+}
+
+cmd_start() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs start <codespace-name>"
+        echo "Run 'mcs list' to see available codespaces"
+        exit 1
+    fi
+    
+    local codespace_dir="$CODESPACES_DIR/$1"
+    if [ ! -f "$codespace_dir/docker-compose.yml" ]; then
+        error "Codespace '$1' not found"
+        exit 1
+    fi
+    
+    info "Starting $1..."
+    docker-compose -f "$codespace_dir/docker-compose.yml" up -d
+    
+    if [ -f "$codespace_dir/.env" ]; then
+        local vs_code_port=$(grep "VS_CODE_PORT=" "$codespace_dir/.env" | cut -d'=' -f2)
+        local password=$(grep "PASSWORD=" "$codespace_dir/.env" | cut -d'=' -f2)
+        success "Started! Access at: ${tty_bold}http://localhost:$vs_code_port${tty_reset}"
+        echo "   Password: $password"
+    fi
+}
+
+cmd_stop() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs stop <codespace-name>"
+        echo "Run 'mcs list' to see running codespaces"
+        exit 1
+    fi
+    
+    local codespace_dir="$CODESPACES_DIR/$1"
+    if [ ! -f "$codespace_dir/docker-compose.yml" ]; then
+        error "Codespace '$1' not found"
+        exit 1
+    fi
+    
+    info "Stopping $1..."
+    docker-compose -f "$codespace_dir/docker-compose.yml" stop
+    success "Stopped"
+}
+
+cmd_restart() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs restart <codespace-name>"
+        exit 1
+    fi
+    
+    cmd_stop "$1"
+    cmd_start "$1"
+}
+
+cmd_remove() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs remove <codespace-name>"
+        exit 1
+    fi
+    
+    local codespace_dir="$CODESPACES_DIR/$1"
+    if [ ! -f "$codespace_dir/docker-compose.yml" ]; then
+        error "Codespace '$1' not found"
+        exit 1
+    fi
+    
+    warning "This will permanently delete the codespace '$1' and all its data"
+    read -p "Are you sure? [y/N] " -n 1 -r
+    echo
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        info "Removing $1..."
+        docker-compose -f "$codespace_dir/docker-compose.yml" down 2>/dev/null || true
+        rm -rf "$codespace_dir"
+        
+        # Remove aliases from .zshrc
+        if [ -f ~/.zshrc ]; then
+            sed -i.bak "/# Codespace: $1/,+1d" ~/.zshrc
+        fi
+        
+        success "Removed"
+    else
+        echo "Cancelled"
+    fi
+}
+
+cmd_logs() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs logs <codespace-name>"
+        exit 1
+    fi
+    
+    local codespace_dir="$CODESPACES_DIR/$1"
+    if [ ! -f "$codespace_dir/docker-compose.yml" ]; then
+        error "Codespace '$1' not found"
+        exit 1
+    fi
+    
+    docker-compose -f "$codespace_dir/docker-compose.yml" logs -f
+}
+
+cmd_exec() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs exec <codespace-name> [command]"
+        exit 1
+    fi
+    
+    local codespace_name="$1"
+    shift
+    local container_name="${codespace_name}-dev"
+    
+    if [ $# -eq 0 ]; then
+        # Interactive shell
+        docker exec -it "$container_name" /bin/bash
+    else
+        # Run command
+        docker exec -it "$container_name" "$@"
+    fi
+}
+
+cmd_info() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs info <codespace-name>"
+        exit 1
+    fi
+    
+    local codespace_dir="$CODESPACES_DIR/$1"
+    if [ ! -f "$codespace_dir/.env" ]; then
+        error "Codespace '$1' not found"
+        exit 1
+    fi
+    
+    printf "${tty_bold}Codespace: $1${tty_reset}\n"
+    echo "─────────────────────────────"
+    
+    # Read .env file
+    while IFS='=' read -r key value; do
+        case "$key" in
+            REPO_URL) printf "Repository: %s\n" "$value" ;;
+            VS_CODE_PORT) printf "VS Code Port: %s\n" "$value" ;;
+            APP_PORT) printf "App Port: %s\n" "$value" ;;
+            PASSWORD) printf "Password: %s\n" "$value" ;;
+            CREATED) printf "Created: %s\n" "$value" ;;
+        esac
+    done < "$codespace_dir/.env"
+    
+    # Check if running
+    local container_name="${1}-dev"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
+        printf "Status: ${tty_green}running${tty_reset}\n"
+        
+        # Get container stats
+        local stats=$(docker stats --no-stream --format "table {{.MemUsage}}\t{{.CPUPerc}}" "$container_name" | tail -n 1)
+        printf "Resources: %s\n" "$stats"
+    else
+        printf "Status: ${tty_yellow}stopped${tty_reset}\n"
+    fi
+    
+    # Directory info
+    printf "Location: %s\n" "$codespace_dir"
+    if [ -d "$codespace_dir/src" ]; then
+        local size=$(du -sh "$codespace_dir/src" 2>/dev/null | cut -f1)
+        printf "Source size: %s\n" "$size"
+    fi
+}
+
+cmd_status() {
+    ~/monitor-system.sh
+}
+
+cmd_update() {
+    info "Updating Michael's Codespaces..."
+    cd "$HOME/.ubuntu-codespace"
+    git pull origin main
+    success "Updated to latest version"
+}
+
+cmd_doctor() {
+    printf "${tty_bold}Michael's Codespaces Doctor${tty_reset}\n"
+    echo "─────────────────────────────"
+    
+    # Check Docker
+    printf "Docker: "
+    if command -v docker >/dev/null 2>&1; then
+        if docker ps >/dev/null 2>&1; then
+            printf "${tty_green}✓${tty_reset} installed and running\n"
+        else
+            printf "${tty_yellow}⚠${tty_reset}  installed but not accessible (logout/login needed?)\n"
+        fi
+    else
+        printf "${tty_red}✗${tty_reset} not installed\n"
+    fi
+    
+    # Check docker-compose
+    printf "Docker Compose: "
+    if command -v docker-compose >/dev/null 2>&1; then
+        printf "${tty_green}✓${tty_reset} installed\n"
+    else
+        printf "${tty_red}✗${tty_reset} not installed\n"
+    fi
+    
+    # Check directories
+    printf "Codespaces directory: "
+    if [ -d "$CODESPACES_DIR" ]; then
+        printf "${tty_green}✓${tty_reset} exists\n"
+    else
+        printf "${tty_red}✗${tty_reset} missing\n"
+    fi
+    
+    # Check setup script
+    printf "Setup script: "
+    if [ -x "$SETUP_SCRIPT" ]; then
+        printf "${tty_green}✓${tty_reset} found and executable\n"
+    else
+        printf "${tty_red}✗${tty_reset} missing or not executable\n"
+    fi
+    
+    # Check GitHub auth
+    printf "GitHub SSH: "
+    if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        printf "${tty_green}✓${tty_reset} authenticated\n"
+    else
+        printf "${tty_yellow}⚠${tty_reset}  not configured (run setup-github-auth.sh)\n"
+    fi
+}
+
+cmd_help() {
+    cat << EOF
+${tty_bold}Michael's Codespaces (mcs) v${VERSION}${tty_reset}
+
+${tty_bold}Usage:${tty_reset} mcs <command> [arguments]
+
+${tty_bold}Commands:${tty_reset}
+  ${tty_cyan}create${tty_reset} <repo-url>     Create a new codespace from a GitHub repository
+  ${tty_cyan}list${tty_reset}                  List all codespaces and their status
+  ${tty_cyan}start${tty_reset} <name>          Start a codespace
+  ${tty_cyan}stop${tty_reset} <name>           Stop a running codespace
+  ${tty_cyan}restart${tty_reset} <name>        Restart a codespace
+  ${tty_cyan}remove${tty_reset} <name>         Remove a codespace permanently
+  ${tty_cyan}logs${tty_reset} <name>           View logs for a codespace
+  ${tty_cyan}exec${tty_reset} <name> [cmd]     Execute a command in a codespace (or enter shell)
+  ${tty_cyan}info${tty_reset} <name>           Show detailed information about a codespace
+  ${tty_cyan}status${tty_reset}                Show system and codespaces status
+  ${tty_cyan}update${tty_reset}                Update Michael's Codespaces to latest version
+  ${tty_cyan}doctor${tty_reset}                Check system health and configuration
+  ${tty_cyan}help${tty_reset}                  Show this help message
+
+${tty_bold}Examples:${tty_reset}
+  mcs create git@github.com:facebook/react.git
+  mcs list
+  mcs start facebook-react
+  mcs exec facebook-react npm install
+  mcs stop facebook-react
+
+${tty_bold}Shortcuts:${tty_reset}
+  mcs ls                 Alias for 'list'
+  mcs rm                 Alias for 'remove'
+
+${tty_bold}More info:${tty_reset} https://github.com/michaelkeevildown/ubuntu-codespace
+EOF
+}
+
+# Main command dispatcher
+case "${1:-help}" in
+    create|new)
+        shift
+        cmd_create "$@"
+        ;;
+    list|ls)
+        cmd_list
+        ;;
+    start|up)
+        shift
+        cmd_start "$@"
+        ;;
+    stop|down)
+        shift
+        cmd_stop "$@"
+        ;;
+    restart)
+        shift
+        cmd_restart "$@"
+        ;;
+    remove|rm|delete)
+        shift
+        cmd_remove "$@"
+        ;;
+    logs|log)
+        shift
+        cmd_logs "$@"
+        ;;
+    exec|run)
+        shift
+        cmd_exec "$@"
+        ;;
+    info|show)
+        shift
+        cmd_info "$@"
+        ;;
+    status|monitor)
+        cmd_status
+        ;;
+    update|upgrade)
+        cmd_update
+        ;;
+    doctor|check)
+        cmd_doctor
+        ;;
+    help|--help|-h)
+        cmd_help
+        ;;
+    version|--version|-v)
+        echo "mcs version $VERSION"
+        ;;
+    *)
+        error "Unknown command: $1"
+        echo "Run 'mcs help' for usage"
+        exit 1
+        ;;
+esac
