@@ -18,6 +18,12 @@ mkdir -p ~/codespaces/auth/git-config
 TOKEN_FILE="$HOME/codespaces/auth/tokens/github.token"
 if [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
     echo_success "GitHub token already configured"
+    # Display authenticated user
+    if token=$(cat "$TOKEN_FILE" 2>/dev/null); then
+        if username=$(curl -s -H "Authorization: token $token" https://api.github.com/user | grep '"login"' | cut -d'"' -f4); then
+            echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
+        fi
+    fi
 else
     # Check environment variable first
     if [ -n "${GITHUB_TOKEN:-}" ]; then
@@ -25,11 +31,86 @@ else
         echo "$GITHUB_TOKEN" > "$TOKEN_FILE"
         chmod 600 "$TOKEN_FILE"
         echo_success "GitHub token saved from environment"
+        # Verify it works
+        if username=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | grep '"login"' | cut -d'"' -f4); then
+            echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
+        fi
     else
-        # Create a placeholder and instructions
-        echo_info "GitHub Personal Access Token required for codespace creation"
+        # Interactive token setup
+        echo ""
+        echo_step "GitHub Personal Access Token Setup"
+        echo ""
+        echo "To create codespaces, you need a GitHub Personal Access Token."
+        echo ""
+        echo_info "Steps to create your token:"
+        echo "1. Open this URL in your browser:"
+        echo "   ${COLOR_CYAN}${COLOR_UNDERLINE}https://github.com/settings/tokens/new${COLOR_RESET}"
+        echo ""
+        echo "2. On the GitHub page:"
+        echo "   • ${COLOR_BOLD}Note:${COLOR_RESET} Enter 'Michael's Codespaces - $(hostname)'"
+        echo "   • ${COLOR_BOLD}Expiration:${COLOR_RESET} Select '90 days' (recommended)"
+        echo "   • ${COLOR_BOLD}Select scopes:${COLOR_RESET} Check these boxes:"
+        echo "     ✓ repo"
+        echo "     ✓ workflow" 
+        echo "     ✓ write:packages"
+        echo ""
+        echo "3. Click '${COLOR_GREEN}Generate token${COLOR_RESET}' at the bottom"
+        echo "4. ${COLOR_YELLOW}Copy the token${COLOR_RESET} (starts with ghp_)"
+        echo ""
         
-        # Create instructions file
+        # Prompt for token
+        while true; do
+            echo -n "Paste your GitHub token here: "
+            read -s GITHUB_TOKEN_INPUT
+            echo ""
+            
+            if [ -z "$GITHUB_TOKEN_INPUT" ]; then
+                echo_warning "Token is required for creating codespaces."
+                echo ""
+                read -p "Do you want to skip token setup? [y/N] " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    echo_info "Skipping token setup. You'll need to set it before creating codespaces."
+                    break
+                else
+                    echo "Let's try again..."
+                    echo ""
+                    continue
+                fi
+            fi
+            
+            # Validate token format
+            if [[ "$GITHUB_TOKEN_INPUT" =~ ^ghp_[a-zA-Z0-9]{36}$ ]]; then
+                echo "$GITHUB_TOKEN_INPUT" > "$TOKEN_FILE"
+                chmod 600 "$TOKEN_FILE"
+                echo_success "GitHub token saved successfully!"
+                
+                # Test the token
+                start_spinner "Verifying token with GitHub"
+                if curl -s -H "Authorization: token $GITHUB_TOKEN_INPUT" https://api.github.com/user | grep -q '"login"'; then
+                    stop_spinner
+                    echo_success "Token verified - authentication working!"
+                    
+                    # Get and display the username
+                    username=$(curl -s -H "Authorization: token $GITHUB_TOKEN_INPUT" https://api.github.com/user | grep '"login"' | cut -d'"' -f4)
+                    echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
+                    break
+                else
+                    stop_spinner
+                    echo_error "Token verification failed. Please check your token and try again."
+                    rm -f "$TOKEN_FILE"
+                    echo ""
+                    continue
+                fi
+            else
+                echo_error "Invalid token format. GitHub tokens start with 'ghp_' followed by 36 characters."
+                echo_info "Example: ghp_A1b2C3d4E5f6G7h8I9j0K1L2M3N4O5P6Q7R8"
+                echo ""
+                continue
+            fi
+        done
+        
+        # Always create instructions file
         cat > ~/codespaces/auth/tokens/README.md << 'EOF'
 # GitHub Authentication Setup
 
