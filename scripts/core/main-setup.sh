@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Main setup orchestrator
+# Main setup orchestrator - Homebrew-style
 # This script calls all the modular components in the correct order
 
 set -e
@@ -12,26 +12,52 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/../utils/colors.sh"
 source "$SCRIPT_DIR/../utils/checks.sh"
 
-echo_info "🚀 Starting Michael's Codespaces setup..."
+# Setup modules
+SETUP_MODULES=(
+    "01-system-packages.sh:Installing system packages"
+    "02-docker-setup.sh:Setting up Docker"
+    "03-shell-setup.sh:Configuring shell environment"
+    "04-codespace-infrastructure.sh:Creating codespace infrastructure"
+    "05-monitoring-tools.sh:Installing monitoring tools"
+    "06-github-auth.sh:Configuring GitHub access"
+)
+
+# Start setup
+echo ""
+echo_box "${SYMBOL_ROCKET} Michael's Codespaces Setup"
 echo ""
 
-# Run setup modules in order
-"$SCRIPT_DIR/01-system-packages.sh"
+# Initialize progress
+init_progress ${#SETUP_MODULES[@]}
+
+# Run each module
+for module_info in "${SETUP_MODULES[@]}"; do
+    IFS=':' read -r module_file module_desc <<< "$module_info"
+    
+    step_progress "$module_desc"
+    
+    # Run the module with error handling
+    if ! "$SCRIPT_DIR/$module_file" > /tmp/mcs-setup-$module_file.log 2>&1; then
+        echo_error "Failed during: $module_desc"
+        echo_info "Check log: /tmp/mcs-setup-$module_file.log"
+        exit 1
+    fi
+    
+    echo ""
+done
+
+echo_box_end
+
+# Success message
+echo_success "${SYMBOL_CHECK} Setup completed successfully!"
 echo ""
 
-"$SCRIPT_DIR/02-docker-setup.sh"
+# Show summary
+echo_step "Summary"
+echo_list_item "•" "System packages installed"
+echo_list_item "•" "Docker configured and running"
+echo_list_item "•" "Zsh with Oh My Zsh installed"
+echo_list_item "•" "Codespace infrastructure created"
+echo_list_item "•" "Monitoring tools installed"
+echo_list_item "•" "GitHub SSH key generated"
 echo ""
-
-"$SCRIPT_DIR/03-shell-setup.sh"
-echo ""
-
-"$SCRIPT_DIR/04-codespace-infrastructure.sh"
-echo ""
-
-"$SCRIPT_DIR/05-monitoring-tools.sh"
-echo ""
-
-"$SCRIPT_DIR/06-github-auth.sh"
-echo ""
-
-echo_success "✅ Main setup completed successfully!"

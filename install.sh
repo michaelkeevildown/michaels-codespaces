@@ -59,12 +59,13 @@ command_exists() {
 
 # Main installation
 main() {
-    # Banner
-    printf "\n${tty_bold}Michael's Codespaces Installer${tty_reset}\n"
-    printf "==============================\n\n"
+    # Banner with box drawing
+    printf "\n${tty_bold}┌────────────────────────────────────┐${tty_reset}\n"
+    printf "${tty_bold}│  Michael's Codespaces Installer    │${tty_reset}\n"
+    printf "${tty_bold}└────────────────────────────────────┘${tty_reset}\n\n"
 
-    # Checks
-    info "Checking system requirements..."
+    # Checks with spinner
+    printf "${tty_blue}==>${tty_reset} ${tty_bold}Checking system requirements${tty_reset}\n"
     
     if [[ "$EUID" -eq 0 ]]; then
         abort "Don't run this installer as root."

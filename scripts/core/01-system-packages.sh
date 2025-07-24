@@ -34,16 +34,39 @@ PACKAGES=(
 )
 
 echo_info "Installing packages..."
+
+# Count packages to install
+packages_to_install=0
 for package in "${PACKAGES[@]}"; do
     if ! dpkg -l | grep -q "^ii  $package "; then
-        echo_debug "Installing $package..."
-        sudo apt install -y -qq "$package" > /dev/null 2>&1 || {
-            echo_warning "Failed to install $package, continuing..."
-        }
-    else
-        echo_debug "$package already installed"
+        ((packages_to_install++))
     fi
 done
+
+if [ $packages_to_install -eq 0 ]; then
+    echo_success "All packages already installed"
+else
+    echo_info "Installing $packages_to_install packages..."
+    
+    # Install with progress
+    installed=0
+    for package in "${PACKAGES[@]}"; do
+        if ! dpkg -l | grep -q "^ii  $package "; then
+            progress_bar $installed $packages_to_install 40
+            printf " Installing %s" "$package"
+            
+            if sudo apt install -y -qq "$package" > /dev/null 2>&1; then
+                ((installed++))
+            else
+                echo_warning "Failed to install $package, continuing..."
+            fi
+        fi
+    done
+    
+    # Complete progress bar
+    progress_bar $packages_to_install $packages_to_install 40
+    printf " Done!          \n"
+fi
 
 # Clean up
 sudo apt autoremove -y -qq > /dev/null 2>&1
