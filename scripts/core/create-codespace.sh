@@ -76,11 +76,7 @@ parse_arguments() {
         exit 0
     fi
     
-    # First argument is repository URL
-    REPO_URL="$1"
-    shift
-    
-    # Parse options
+    # Parse all arguments - repository URL can be anywhere
     while [[ $# -gt 0 ]]; do
         case $1 in
             --name)
@@ -119,6 +115,15 @@ parse_arguments() {
                 export DEBUG=1
                 shift
                 ;;
+            git@*|https://github.com/*|http://github.com/*|https://gitlab.com/*|http://gitlab.com/*|*.git)
+                # This looks like a repository URL
+                if [ -n "$REPO_URL" ]; then
+                    echo_error "Multiple repository URLs specified: '$REPO_URL' and '$1'"
+                    exit 1
+                fi
+                REPO_URL="$1"
+                shift
+                ;;
             *)
                 echo_error "Unknown option: $1"
                 usage
@@ -126,6 +131,13 @@ parse_arguments() {
                 ;;
         esac
     done
+    
+    # Validate that repository URL was provided
+    if [ -z "$REPO_URL" ]; then
+        echo_error "Repository URL is required"
+        usage
+        exit 1
+    fi
 }
 
 # Validate repository URL
