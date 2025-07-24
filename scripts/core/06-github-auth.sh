@@ -122,6 +122,12 @@ else
                 
                 start_spinner "Verifying token with GitHub"
                 
+                # Debug: Show what we're about to do
+                if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                    echo_debug "Making API request to https://api.github.com/user"
+                    echo_debug "Token format: ${GITHUB_TOKEN_INPUT:0:7}...${GITHUB_TOKEN_INPUT: -4}"
+                fi
+                
                 # Make API call with timeout
                 response=$(curl -s --max-time 10 --connect-timeout 5 \
                     -H "Authorization: token $GITHUB_TOKEN_INPUT" \
@@ -129,13 +135,37 @@ else
                     -w "\n%{http_code}" \
                     https://api.github.com/user 2>&1)
                 
+                # Debug: Show raw response
+                if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                    echo_debug "Raw response length: ${#response} characters"
+                    echo_debug "Last 50 chars of response: '${response: -50}'"
+                    echo_debug "Response contains newlines: $(echo "$response" | wc -l) lines"
+                fi
+                
                 # Extract HTTP status code (last line)
                 http_code=$(echo "$response" | tail -n1)
                 # Extract JSON response (everything except last line)
                 json_response=$(echo "$response" | sed '$d')
                 
+                # Debug: Show what we extracted
+                if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                    echo_debug "Extracted HTTP code: '$http_code' (length: ${#http_code})"
+                    echo_debug "HTTP code bytes: $(echo -n "$http_code" | od -An -tx1)"
+                    echo_debug "JSON response first 100 chars: '${json_response:0:100}'"
+                fi
+                
                 stop_spinner
                 trap - EXIT INT TERM  # Remove trap
+                
+                # Debug: Show comparison
+                if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                    echo_debug "Comparing HTTP code '$http_code' with '200'"
+                    if [[ "$http_code" == "200" ]]; then
+                        echo_debug "HTTP code matches 200!"
+                    else
+                        echo_debug "HTTP code does NOT match 200"
+                    fi
+                fi
                 
                 if [[ "$http_code" == "200" ]]; then
                     # Try to extract username
