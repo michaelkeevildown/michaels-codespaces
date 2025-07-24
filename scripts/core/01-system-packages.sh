@@ -12,7 +12,9 @@ echo_step "📦 Installing system packages..."
 
 # Update package list
 echo_info "Updating package list..."
+echo_status "Downloading package information from Ubuntu repositories..."
 sudo apt update -qq
+clear_status
 
 # Core system packages
 PACKAGES=(

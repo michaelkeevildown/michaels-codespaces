@@ -37,26 +37,22 @@ else
         fi
     else
         # Interactive token setup
+        echo_box "GitHub Personal Access Token Setup" 50
         echo ""
-        echo_step "GitHub Personal Access Token Setup"
+        echo "To create codespaces, you need a GitHub token."
         echo ""
-        echo "To create codespaces, you need a GitHub Personal Access Token."
+        echo "${COLOR_BOLD}Quick Setup:${COLOR_RESET}"
         echo ""
-        echo_info "Steps to create your token:"
-        echo "1. Open this URL in your browser:"
+        echo "1. ${COLOR_BLUE}Open this URL:${COLOR_RESET}"
         echo "   ${COLOR_CYAN}${COLOR_UNDERLINE}https://github.com/settings/tokens/new${COLOR_RESET}"
         echo ""
-        echo "2. On the GitHub page:"
-        echo "   • ${COLOR_BOLD}Note:${COLOR_RESET} Enter 'Michael's Codespaces - $(hostname)'"
-        echo "   • ${COLOR_BOLD}Expiration:${COLOR_RESET} Select '90 days' (recommended)"
-        echo "   • ${COLOR_BOLD}Select scopes:${COLOR_RESET} Check these boxes:"
-        echo "     ✓ repo"
-        echo "     ✓ workflow" 
-        echo "     ✓ write:packages"
+        echo "2. ${COLOR_BLUE}Configure token:${COLOR_RESET}"
+        echo "   • Note: ${COLOR_DIM}Michael's Codespaces - $(hostname)${COLOR_RESET}"
+        echo "   • Expiration: ${COLOR_DIM}90 days${COLOR_RESET}"
+        echo "   • Scopes: ${COLOR_GREEN}✓${COLOR_RESET} repo, workflow, write:packages"
         echo ""
-        echo "3. Click '${COLOR_GREEN}Generate token${COLOR_RESET}' at the bottom"
-        echo "4. ${COLOR_YELLOW}Copy the token${COLOR_RESET} (starts with ghp_)"
-        echo ""
+        echo "3. ${COLOR_BLUE}Generate & copy token${COLOR_RESET} ${COLOR_DIM}(starts with ghp_)${COLOR_RESET}"
+        echo_box_end 50
         
         # Prompt for token
         while true; do

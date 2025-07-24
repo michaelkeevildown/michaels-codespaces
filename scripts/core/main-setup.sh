@@ -35,11 +35,11 @@ for module_info in "${SETUP_MODULES[@]}"; do
     IFS=':' read -r module_file module_desc <<< "$module_info"
     
     step_progress "$module_desc"
+    echo ""
     
-    # Run the module with error handling
-    if ! "$SCRIPT_DIR/$module_file" > /tmp/mcs-setup-$module_file.log 2>&1; then
+    # Run the module and show output
+    if ! "$SCRIPT_DIR/$module_file"; then
         echo_error "Failed during: $module_desc"
-        echo_info "Check log: /tmp/mcs-setup-$module_file.log"
         exit 1
     fi
     

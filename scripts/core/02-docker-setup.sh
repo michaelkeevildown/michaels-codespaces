@@ -18,12 +18,20 @@ else
     echo_info "Installing Docker..."
     
     # Remove any old Docker installations
+    echo_status "Removing old Docker versions..."
     sudo apt remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
+    clear_status
     
     # Install Docker using official script
+    echo_status "Downloading Docker installation script..."
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    sudo sh /tmp/get-docker.sh > /dev/null 2>&1
+    clear_status
+    
+    echo_status "Installing Docker (this may take a few minutes)..."
+    sudo sh /tmp/get-docker.sh
     rm /tmp/get-docker.sh
+    
+    echo_success "Docker installed successfully"
 fi
 
 # Add user to docker group

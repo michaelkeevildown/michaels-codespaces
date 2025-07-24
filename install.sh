@@ -122,8 +122,12 @@ main() {
     find scripts -name "*.sh" -exec chmod +x {} \;
     chmod +x bin/mcs
     
-    # Run main setup
-    ./scripts/core/main-setup.sh || abort "Setup failed"
+    # Run main setup with clean UI
+    if [ -f ./scripts/core/main-setup-clean.sh ]; then
+        ./scripts/core/main-setup-clean.sh || abort "Setup failed"
+    else
+        ./scripts/core/main-setup.sh || abort "Setup failed"
+    fi
     
     # Install key scripts to user's home
     info "Installing codespace tools..."
