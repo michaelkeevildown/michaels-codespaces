@@ -5,10 +5,21 @@
 
 set -e
 
+# Enable debug mode if DEBUG or VERBOSE environment variable is set
+[[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]] && set -x
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../utils/colors.sh"
 
 echo_step "🔐 Configuring GitHub access..."
+
+# Show debug info if enabled
+if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+    echo_debug "Debug mode enabled"
+    echo_debug "Script directory: $SCRIPT_DIR"
+    echo_debug "Home directory: $HOME"
+    echo_debug "Current user: $USER"
+fi
 
 # Create directories for auth
 mkdir -p ~/codespaces/auth/tokens
@@ -20,7 +31,7 @@ if [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
     echo_success "GitHub token already configured"
     # Display authenticated user
     if token=$(cat "$TOKEN_FILE" 2>/dev/null); then
-        if username=$(curl -s -H "Authorization: token $token" https://api.github.com/user | grep '"login"' | cut -d'"' -f4); then
+        if username=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $token" https://api.github.com/user | grep '"login"' | cut -d'"' -f4 2>/dev/null); then
             echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
         fi
     fi
@@ -32,7 +43,7 @@ else
         chmod 600 "$TOKEN_FILE"
         echo_success "GitHub token saved from environment"
         # Verify it works
-        if username=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | grep '"login"' | cut -d'"' -f4); then
+        if username=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | grep '"login"' | cut -d'"' -f4 2>/dev/null); then
             echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
         fi
     else
@@ -41,31 +52,31 @@ else
         echo ""
         echo "To create codespaces, you need a GitHub token."
         echo ""
-        echo "${COLOR_BOLD}Quick Setup:${COLOR_RESET}"
+        echo -e "${COLOR_BOLD}Quick Setup:${COLOR_RESET}"
         echo ""
-        echo "1. ${COLOR_BLUE}Open this URL:${COLOR_RESET}"
-        echo "   ${COLOR_CYAN}${COLOR_UNDERLINE}https://github.com/settings/tokens/new${COLOR_RESET}"
+        echo -e "1. ${COLOR_BLUE}Open this URL:${COLOR_RESET}"
+        echo -e "   ${COLOR_CYAN}${COLOR_UNDERLINE}https://github.com/settings/tokens/new${COLOR_RESET}"
         echo ""
-        echo "2. ${COLOR_BLUE}Configure token:${COLOR_RESET}"
-        echo "   • ${COLOR_BOLD}Note:${COLOR_RESET} Michael's Codespaces - $(hostname)"
-        echo "   • ${COLOR_BOLD}Expiration:${COLOR_RESET} 90 days (recommended)"
+        echo -e "2. ${COLOR_BLUE}Configure token:${COLOR_RESET}"
+        echo -e "   • ${COLOR_BOLD}Note:${COLOR_RESET} Michael's Codespaces - $(hostname)"
+        echo -e "   • ${COLOR_BOLD}Expiration:${COLOR_RESET} 90 days (recommended)"
         echo ""
-        echo "   ${COLOR_BOLD}Select scopes - Check these boxes:${COLOR_RESET}"
-        echo "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}repo${COLOR_RESET} (Full control of private repositories)"
-        echo "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}workflow${COLOR_RESET} (Update GitHub Action workflows)"  
-        echo "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}write:packages${COLOR_RESET} (Upload packages to GitHub Package Registry)"
+        echo -e "   ${COLOR_BOLD}Select scopes - Check these boxes:${COLOR_RESET}"
+        echo -e "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}repo${COLOR_RESET} (Full control of private repositories)"
+        echo -e "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}workflow${COLOR_RESET} (Update GitHub Action workflows)"  
+        echo -e "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}write:packages${COLOR_RESET} (Upload packages to GitHub Package Registry)"
         echo ""
-        echo "   ${COLOR_DIM}Note: The 'repo' scope includes:${COLOR_RESET}"
-        echo "   ${COLOR_DIM}• repo:status, repo_deployment, public_repo, repo:invite, security_events${COLOR_RESET}"
+        echo -e "   ${COLOR_GRAY}Note: The 'repo' scope includes:${COLOR_RESET}"
+        echo -e "   ${COLOR_GRAY}• repo:status, repo_deployment, public_repo, repo:invite, security_events${COLOR_RESET}"
         echo ""
-        echo "3. ${COLOR_BLUE}Generate & copy token${COLOR_RESET} ${COLOR_DIM}(starts with ghp_)${COLOR_RESET}"
+        echo -e "3. ${COLOR_BLUE}Generate & copy token${COLOR_RESET} ${COLOR_GRAY}(starts with ghp_)${COLOR_RESET}"
         echo_box_end 50
         
         # Prompt for token with better guidance
         echo ""
         printf "${COLOR_BOLD}Ready to paste your token?${COLOR_RESET}\n"
-        printf "${COLOR_DIM}• Make sure you checked: repo, workflow, write:packages${COLOR_RESET}\n"
-        printf "${COLOR_DIM}• Token should start with 'ghp_' and be 40 characters long${COLOR_RESET}\n"
+        printf "${COLOR_GRAY}• Make sure you checked: repo, workflow, write:packages${COLOR_RESET}\n"
+        printf "${COLOR_GRAY}• Token should start with 'ghp_' and be 40 characters long${COLOR_RESET}\n"
         echo ""
         
         while true; do
@@ -94,24 +105,83 @@ else
             fi
             
             # Validate token format
+            if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                echo_debug "Token format validation..."
+                echo_debug "Token length: ${#GITHUB_TOKEN_INPUT}"
+                echo_debug "Token prefix: ${GITHUB_TOKEN_INPUT:0:4}..."
+            fi
+            
             if [[ "$GITHUB_TOKEN_INPUT" =~ ^ghp_[a-zA-Z0-9]{36}$ ]]; then
                 echo "$GITHUB_TOKEN_INPUT" > "$TOKEN_FILE"
                 chmod 600 "$TOKEN_FILE"
                 echo_success "GitHub token saved successfully!"
                 
                 # Test the token
+                # Set up trap to ensure spinner stops
+                trap 'stop_spinner' EXIT INT TERM
+                
                 start_spinner "Verifying token with GitHub"
-                if curl -s -H "Authorization: token $GITHUB_TOKEN_INPUT" https://api.github.com/user | grep -q '"login"'; then
-                    stop_spinner
-                    echo_success "Token verified - authentication working!"
+                
+                # Make API call with timeout
+                response=$(curl -s --max-time 10 --connect-timeout 5 \
+                    -H "Authorization: token $GITHUB_TOKEN_INPUT" \
+                    -H "Accept: application/vnd.github.v3+json" \
+                    -w "\n%{http_code}" \
+                    https://api.github.com/user 2>&1)
+                
+                # Extract HTTP status code (last line)
+                http_code=$(echo "$response" | tail -n1)
+                # Extract JSON response (everything except last line)
+                json_response=$(echo "$response" | sed '$d')
+                
+                stop_spinner
+                trap - EXIT INT TERM  # Remove trap
+                
+                if [[ "$http_code" == "200" ]]; then
+                    # Try to extract username
+                    if command -v jq >/dev/null 2>&1; then
+                        username=$(echo "$json_response" | jq -r '.login' 2>/dev/null)
+                    else
+                        username=$(echo "$json_response" | grep -o '"login":"[^"]*"' | cut -d'"' -f4)
+                    fi
                     
-                    # Get and display the username
-                    username=$(curl -s -H "Authorization: token $GITHUB_TOKEN_INPUT" https://api.github.com/user | grep '"login"' | cut -d'"' -f4)
-                    echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
-                    break
+                    if [[ -n "$username" ]]; then
+                        echo_success "Token verified - authentication working!"
+                        echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
+                        break
+                    else
+                        echo_error "Token verified but couldn't parse username from response"
+                        if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                            echo_debug "HTTP Code: $http_code"
+                            echo_debug "Response (first 500 chars): ${json_response:0:500}"
+                            echo_info "Tip: Install 'jq' for better JSON parsing: sudo apt-get install jq"
+                        fi
+                        break  # Still break as token is valid
+                    fi
+                elif [[ "$http_code" == "401" ]]; then
+                    echo_error "Token verification failed: Invalid or expired token"
+                    rm -f "$TOKEN_FILE"
+                    echo ""
+                    continue
+                elif [[ "$http_code" == "403" ]]; then
+                    echo_error "Token verification failed: Insufficient permissions"
+                    echo_info "Make sure your token has the required scopes: repo, workflow, write:packages"
+                    rm -f "$TOKEN_FILE"
+                    echo ""
+                    continue
+                elif [[ "$http_code" == "000" ]]; then
+                    echo_error "Token verification failed: Connection timeout or network error"
+                    echo_info "Please check your internet connection and try again"
+                    rm -f "$TOKEN_FILE"
+                    echo ""
+                    continue
                 else
-                    stop_spinner
-                    echo_error "Token verification failed. Please check your token and try again."
+                    echo_error "Token verification failed: HTTP $http_code"
+                    if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+                        echo_debug "Full response:"
+                        echo "$json_response" | head -20
+                        echo_info "To see full debug output, run: DEBUG=1 $0"
+                    fi
                     rm -f "$TOKEN_FILE"
                     echo ""
                     continue
