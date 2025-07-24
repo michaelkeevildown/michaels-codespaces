@@ -8,8 +8,22 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Debug mode
+if [ "${DEBUG:-0}" = "1" ]; then
+    set -x
+fi
+
 # Source utilities
+if [ ! -f "$SCRIPT_DIR/../utils/colors.sh" ]; then
+    echo "Error: Cannot find colors.sh at $SCRIPT_DIR/../utils/colors.sh"
+    exit 1
+fi
 source "$SCRIPT_DIR/../utils/colors.sh"
+
+if [ ! -f "$SCRIPT_DIR/../utils/checks.sh" ]; then
+    echo "Error: Cannot find checks.sh at $SCRIPT_DIR/../utils/checks.sh"
+    exit 1
+fi
 source "$SCRIPT_DIR/../utils/checks.sh"
 
 # Setup modules
@@ -94,7 +108,11 @@ run_github_module() {
 }
 
 # Start setup
-clear
+# Clear screen only if in terminal
+if [ -t 1 ]; then
+    clear 2>/dev/null || true
+fi
+
 echo ""
 printf "${COLOR_BOLD}┌────────────────────────────────────┐${COLOR_RESET}\n"
 printf "${COLOR_BOLD}│  Michael's Codespaces Installer    │${COLOR_RESET}\n"
@@ -115,9 +133,11 @@ echo -n "Starting installation in "
 for i in 3 2 1; do
     printf "${COLOR_YELLOW}%d${COLOR_RESET}" "$i"
     sleep 1
-    printf "\b"
+    if [ $i -gt 1 ]; then
+        printf "\b"
+    fi
 done
-printf "  \n\n"
+printf "\b \n\n"
 
 # Run each module
 module_num=0

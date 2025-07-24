@@ -123,8 +123,16 @@ main() {
     chmod +x bin/mcs
     
     # Run main setup with clean UI
-    if [ -f ./scripts/core/main-setup-clean.sh ]; then
-        ./scripts/core/main-setup-clean.sh || abort "Setup failed"
+    if [ -f ./scripts/core/main-setup-clean.sh ] && [ "${USE_SIMPLE_UI:-0}" != "1" ]; then
+        if ! ./scripts/core/main-setup-clean.sh; then
+            error "Setup failed during installation"
+            echo ""
+            echo "You can try running with simple UI:"
+            echo "  USE_SIMPLE_UI=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
+            echo ""
+            echo "Or check the logs in /tmp/mcs-setup-*.log"
+            exit 1
+        fi
     else
         ./scripts/core/main-setup.sh || abort "Setup failed"
     fi

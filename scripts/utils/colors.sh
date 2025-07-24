@@ -117,7 +117,11 @@ CYAN=$COLOR_CYAN
 NC=$COLOR_RESET
 
 # Terminal width detection
-TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
+if command -v tput >/dev/null 2>&1 && [ -n "${TERM:-}" ]; then
+    TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
+else
+    TERM_WIDTH=80
+fi
 
 # Progress indicators
 SPINNER_FRAMES=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
