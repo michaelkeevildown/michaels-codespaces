@@ -10,6 +10,7 @@ set -e
 CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.ubuntu-codespace}"
 CODESPACE_REPO="https://github.com/michaelkeevildown/ubuntu-codespace.git"
 CODESPACE_SCRIPTS="$HOME/codespaces"
+CODESPACE_BRANCH="${CODESPACE_BRANCH:-main}"
 
 # Colors for output
 if [[ -t 1 ]]; then
@@ -105,7 +106,12 @@ main() {
     
     # Clone repository
     info "Installing Michael's Codespaces to $CODESPACE_HOME..."
-    git clone --depth=1 "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
+    if [[ "$CODESPACE_BRANCH" != "main" ]]; then
+        info "Using branch: $CODESPACE_BRANCH"
+        git clone --depth=1 --branch "$CODESPACE_BRANCH" "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
+    else
+        git clone --depth=1 "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
+    fi
     
     # Run setup from the cloned repository
     info "Running setup scripts..."
