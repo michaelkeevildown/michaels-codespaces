@@ -49,7 +49,9 @@ run_module_clean() {
     
     # Start the module in background
     (
-        "$SCRIPT_DIR/$module_file" > "$output_file" 2>&1
+        # Change to script directory for relative paths
+        cd "$SCRIPT_DIR"
+        "./$module_file" > "$output_file" 2>&1
         echo $? > "$status_file"
     ) &
     
@@ -101,7 +103,7 @@ run_github_module() {
         "$module_num" "$total_modules" "$module_name"
     
     # Run the module interactively
-    "$SCRIPT_DIR/$module_file"
+    (cd "$SCRIPT_DIR" && "./$module_file")
     
     # Add spacing after
     echo ""
@@ -146,6 +148,21 @@ total_modules=${#SETUP_MODULES[@]}
 for module_info in "${SETUP_MODULES[@]}"; do
     IFS=':' read -r module_file module_desc <<< "$module_info"
     ((module_num++))
+    
+    # Check if module file exists
+    if [ ! -f "$SCRIPT_DIR/$module_file" ]; then
+        echo ""
+        echo_error "Module not found: $SCRIPT_DIR/$module_file"
+        echo_info "Available modules:"
+        ls -la "$SCRIPT_DIR/"*.sh 2>/dev/null || echo "  No modules found"
+        exit 1
+    fi
+    
+    # Check if module is executable
+    if [ ! -x "$SCRIPT_DIR/$module_file" ]; then
+        echo_warning "Making $module_file executable..."
+        chmod +x "$SCRIPT_DIR/$module_file"
+    fi
     
     # GitHub auth needs to be interactive
     if [[ "$module_file" == "06-github-auth.sh" ]]; then
