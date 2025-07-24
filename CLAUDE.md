@@ -74,6 +74,62 @@ The system creates a structured directory hierarchy at `~/codespaces/`:
 
 ## Development Workflow
 
+### Testing Changes on a Branch
+
+When developing new features or fixes, use a branch-based workflow:
+
+1. **Create a feature branch locally**:
+   ```bash
+   git checkout -b fix-installation-directories
+   # Make your changes
+   git add -A
+   git commit -m "Description of changes"
+   git push origin fix-installation-directories
+   ```
+
+2. **Test installation from the branch on a VM**:
+   ```bash
+   # Use CODESPACE_BRANCH to specify your branch
+   CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/fix-installation-directories/install.sh)"
+   ```
+
+3. **Debug options for testing**:
+   ```bash
+   # Run with debug output
+   DEBUG=1 CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/fix-installation-directories/install.sh)"
+   
+   # Force non-interactive mode
+   NONINTERACTIVE=1 CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/fix-installation-directories/install.sh)"
+   ```
+
+4. **Clean up failed installations**:
+   ```bash
+   # Soft cleanup (keeps Docker and containers)
+   mcs cleanup
+   
+   # Hard cleanup (removes everything)
+   mcs destroy
+   ```
+
+5. **Merge to main after successful testing**:
+   ```bash
+   git checkout main
+   git merge fix-installation-directories
+   git push origin main
+   ```
+
+### Installation Command Reference
+
+**From main branch (default)**:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/main/install.sh)"
+```
+
+**From a specific branch**:
+```bash
+CODESPACE_BRANCH=branch-name /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/branch-name/install.sh)"
+```
+
 ### Creating the Repository Setup Script
 The main missing component is `setup-repo-codespace.sh` which should:
 1. Accept a GitHub repository URL as parameter
