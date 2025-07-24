@@ -32,7 +32,7 @@ if [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
     # Display authenticated user
     if token=$(cat "$TOKEN_FILE" 2>/dev/null); then
         if username=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $token" https://api.github.com/user | grep '"login"' | cut -d'"' -f4 2>/dev/null); then
-            echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
+            printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
         fi
     fi
 else
@@ -44,7 +44,7 @@ else
         echo_success "GitHub token saved from environment"
         # Verify it works
         if username=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | grep '"login"' | cut -d'"' -f4 2>/dev/null); then
-            echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
+            printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
         fi
     else
         # Interactive token setup
@@ -191,7 +191,7 @@ else
                     
                     if [[ -n "$username" ]]; then
                         echo_success "Token verified - authentication working!"
-                        echo_info "Authenticated as: ${COLOR_BOLD}$username${COLOR_RESET}"
+                        printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
                         break
                     else
                         echo_error "Token verified but couldn't parse username from response"
