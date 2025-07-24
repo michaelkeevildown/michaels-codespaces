@@ -29,10 +29,21 @@ mkdir -p ~/codespaces/auth/git-config
 TOKEN_FILE="$HOME/codespaces/auth/tokens/github.token"
 if [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
     echo_success "GitHub token already configured"
+    
+    if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+        echo_debug "Found existing token file: $TOKEN_FILE"
+        echo_debug "File size: $(stat -f%z "$TOKEN_FILE" 2>/dev/null || stat -c%s "$TOKEN_FILE" 2>/dev/null || echo 'unknown') bytes"
+    fi
+    
     # Display authenticated user
     if token=$(cat "$TOKEN_FILE" 2>/dev/null); then
+        if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
+            echo_debug "Token loaded: ${token:0:7}...${token: -3}"
+        fi
         if username=$(curl -s --max-time 10 --connect-timeout 5 -H "Authorization: token $token" https://api.github.com/user | grep '"login"' | cut -d'"' -f4 2>/dev/null); then
             printf "${COLOR_BLUE}${SYMBOL_INFO}${COLOR_RESET}  Authenticated as: ${COLOR_BOLD}%s${COLOR_RESET}\n" "$username"
+        else
+            echo_warning "Token found but verification failed. You may need to update it."
         fi
     fi
 else
@@ -137,9 +148,32 @@ else
             fi
             
             if [[ "$GITHUB_TOKEN_INPUT" =~ ^ghp_[a-zA-Z0-9]{36}$ ]]; then
-                echo "$GITHUB_TOKEN_INPUT" > "$TOKEN_FILE"
+                # Save token with proper handling
+                printf "%s" "$GITHUB_TOKEN_INPUT" > "$TOKEN_FILE"
                 chmod 600 "$TOKEN_FILE"
+                
+                # Ensure file is written to disk
+                sync
+                
+                # Verify the token was saved correctly
+                if [ -f "$TOKEN_FILE" ]; then
+                    saved_token=$(cat "$TOKEN_FILE" 2>/dev/null)
+                    if [ "$saved_token" != "$GITHUB_TOKEN_INPUT" ]; then
+                        echo_error "Token save verification failed!"
+                        echo_debug "Expected: ${#GITHUB_TOKEN_INPUT} chars"
+                        echo_debug "Saved: ${#saved_token} chars"
+                        rm -f "$TOKEN_FILE"
+                        continue
+                    fi
+                else
+                    echo_error "Failed to create token file!"
+                    continue
+                fi
+                
                 echo_success "GitHub token saved successfully!"
+                
+                # Small delay to ensure file operations complete
+                sleep 0.1
                 
                 # Test the token
                 # Set up trap to ensure spinner stops
@@ -227,9 +261,19 @@ else
                 elif [[ "$http_code" == "000" ]]; then
                     echo_error "Token verification failed: Connection timeout or network error"
                     echo_info "Please check your internet connection and try again"
-                    rm -f "$TOKEN_FILE"
+                    echo_info "Token saved but not verified. Retry or continue with setup."
                     echo ""
-                    continue
+                    # Don't delete token on network errors - it might be valid
+                    read -p "Retry verification? [Y/n] " -n 1 -r
+                    echo ""
+                    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                        # Retry the verification
+                        continue
+                    else
+                        # Accept the token even though we couldn't verify it
+                        echo_warning "Continuing with unverified token"
+                        break
+                    fi
                 else
                     echo_error "Token verification failed: HTTP $http_code"
                     if [[ "${DEBUG:-0}" == "1" || "${VERBOSE:-0}" == "1" ]]; then
