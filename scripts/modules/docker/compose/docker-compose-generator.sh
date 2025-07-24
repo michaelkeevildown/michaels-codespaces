@@ -19,8 +19,7 @@ fi
 
 # Generate basic docker-compose configuration
 generate_basic_compose() {
-    local config="$1"
-    
+    # Use global config array - no parameters needed
     # Extract configuration
     local container_name="${config[container_name]}"
     local image="${config[image]:-codercom/code-server:latest}"
@@ -122,7 +121,6 @@ EOF
 # Generate compose file for specific languages/frameworks
 generate_language_compose() {
     local language="$1"
-    local config="$2"
     
     case "$language" in
         "node"|"nodejs")
@@ -152,7 +150,7 @@ generate_language_compose() {
             ;;
     esac
     
-    generate_basic_compose "$config"
+    generate_basic_compose
     
     # Add volume definitions if needed
     case "$language" in
@@ -177,7 +175,6 @@ generate_language_compose() {
 # Generate compose from .devcontainer.json
 generate_from_devcontainer() {
     local devcontainer_file="$1"
-    local config="$2"
     
     if [ ! -f "$devcontainer_file" ]; then
         echo_error "devcontainer file not found: $devcontainer_file"
@@ -193,7 +190,7 @@ generate_from_devcontainer() {
     # Parse other settings (simplified - in production use jq)
     # Add more parsing as needed
     
-    generate_basic_compose "$config"
+    generate_basic_compose
 }
 
 # Validate compose file

@@ -317,9 +317,9 @@ generate_docker_compose() {
     
     # Generate based on language if specified
     if [ -n "$LANGUAGE" ]; then
-        generate_language_compose "$LANGUAGE" config > "$codespace_dir/docker-compose.yml"
+        generate_language_compose "$LANGUAGE" > "$codespace_dir/docker-compose.yml"
     else
-        generate_basic_compose config > "$codespace_dir/docker-compose.yml"
+        generate_basic_compose > "$codespace_dir/docker-compose.yml"
     fi
     
     # Validate the generated file
