@@ -8,12 +8,7 @@ set -e
 # Configuration
 CODESPACES_DIR="$HOME/codespaces"
 CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.michaels-codespaces}"
-# Use v2 if available, fallback to v1
-if [ -f "$CODESPACE_HOME/scripts/core/create-codespace-v2.sh" ]; then
-    SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace-v2.sh"
-else
-    SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace.sh"
-fi
+SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace.sh"
 VERSION="1.0.0"
 
 # Colors

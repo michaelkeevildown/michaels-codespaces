@@ -12,8 +12,7 @@ Michael's Codespaces uses a modular, enterprise-grade architecture designed for 
 │   └── mcs                          # Main CLI command
 ├── scripts/
 │   ├── core/                        # Core functionality scripts
-│   │   ├── create-codespace.sh      # Original monolithic creation script
-│   │   ├── create-codespace-v2.sh  # New modular creation script
+│   │   ├── create-codespace.sh      # Main codespace creation script
 │   │   └── ...                      # Other core scripts
 │   ├── modules/                     # Modular components
 │   │   ├── github/                  # GitHub integration
@@ -107,9 +106,9 @@ Provides logging and monitoring:
 
 ## Core Scripts
 
-### create-codespace-v2.sh
+### create-codespace.sh
 
-The new modular creation script that:
+The modular creation script that:
 1. Validates repository URLs
 2. Supports custom Docker images
 3. Detects project languages
@@ -128,7 +127,7 @@ The main CLI interface providing:
 ## Data Flow
 
 1. **User runs**: `mcs create <repo-url> [options]`
-2. **CLI validates** input and calls create-codespace-v2.sh
+2. **CLI validates** input and calls create-codespace.sh
 3. **Creation script**:
    - Validates repository access (GitHub module)
    - Clones repository (GitHub module)
