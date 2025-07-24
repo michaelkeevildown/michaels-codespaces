@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 CODESPACES_DIR="$HOME/codespaces"
-CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.ubuntu-codespace}"
+CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.michaels-codespaces}"
 SETUP_SCRIPT="$CODESPACE_HOME/scripts/core/create-codespace.sh"
 VERSION="1.0.0"
 
@@ -273,7 +273,7 @@ cmd_status() {
 
 cmd_update() {
     info "Updating Michael's Codespaces..."
-    cd "$HOME/.ubuntu-codespace"
+    cd "$HOME/.michaels-codespaces"
     git pull origin main
     success "Updated to latest version"
 }
@@ -303,10 +303,10 @@ cmd_cleanup() {
     
     # Remove mcs from PATH (if it was added)
     if [ -f ~/.zshrc ]; then
-        sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.zshrc
+        sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.zshrc
     fi
     if [ -f ~/.bashrc ]; then
-        sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.bashrc
+        sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.bashrc
     fi
     
     success "MCS installation removed!"
@@ -344,12 +344,12 @@ cmd_destroy() {
         if [ -f ~/.zshrc ]; then
             sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.zshrc
             sed -i.bak '/# Codespace:/,+1d' ~/.zshrc
-            sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.zshrc
+            sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.zshrc
         fi
         
         if [ -f ~/.bashrc ]; then
             sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.bashrc
-            sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.bashrc
+            sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.bashrc
         fi
         
         success "MCS files and codespaces removed"

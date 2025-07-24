@@ -7,7 +7,7 @@
 set -e
 
 # Configuration
-CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.ubuntu-codespace}"
+CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.michaels-codespaces}"
 CODESPACE_REPO="https://github.com/michaelkeevildown/ubuntu-codespace.git"
 CODESPACE_SCRIPTS="$HOME/codespaces"
 CODESPACE_BRANCH="${CODESPACE_BRANCH:-main}"
@@ -138,17 +138,17 @@ main() {
     info "Installing codespace tools..."
     
     # Add to PATH (for zsh)
-    if [[ -f "$HOME/.zshrc" ]] && ! grep -q "ubuntu-codespace/bin" "$HOME/.zshrc"; then
+    if [[ -f "$HOME/.zshrc" ]] && ! grep -q "michaels-codespaces/bin" "$HOME/.zshrc"; then
         echo '' >> "$HOME/.zshrc"
         echo "# Michael's Codespaces" >> "$HOME/.zshrc"
-        echo "export PATH=\"\$HOME/.ubuntu-codespace/bin:\$PATH\"" >> "$HOME/.zshrc"
+        echo "export PATH=\"\$HOME/.michaels-codespaces/bin:\$PATH\"" >> "$HOME/.zshrc"
     fi
     
     # Add to PATH (for bash)
-    if [[ -f "$HOME/.bashrc" ]] && ! grep -q "ubuntu-codespace/bin" "$HOME/.bashrc"; then
+    if [[ -f "$HOME/.bashrc" ]] && ! grep -q "michaels-codespaces/bin" "$HOME/.bashrc"; then
         echo '' >> "$HOME/.bashrc"
         echo "# Michael's Codespaces" >> "$HOME/.bashrc"
-        echo "export PATH=\"\$HOME/.ubuntu-codespace/bin:\$PATH\"" >> "$HOME/.bashrc"
+        echo "export PATH=\"\$HOME/.michaels-codespaces/bin:\$PATH\"" >> "$HOME/.bashrc"
     fi
     
     # Create bin directory and install mcs command
