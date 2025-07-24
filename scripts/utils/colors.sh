@@ -196,7 +196,7 @@ progress_bar() {
     printf "\r["
     printf "${COLOR_GREEN}%${filled}s${COLOR_RESET}" | tr ' ' '█'
     printf "%${empty}s" | tr ' ' '░'
-    printf "] %3d%% " $percentage
+    printf " %3d%%] " $percentage
 }
 
 # Spinner functions
