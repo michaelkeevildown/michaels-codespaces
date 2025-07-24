@@ -31,6 +31,22 @@ else
     echo_debug() { [ "${DEBUG:-0}" -eq 1 ] && echo "🔍 $1"; }
 fi
 
+# Source logging utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../utils/logging.sh" ]; then
+    source "$SCRIPT_DIR/../utils/logging.sh"
+    # Initialize logging
+    init_logging
+else
+    # Fallback logging functions
+    log_debug() { [ "${DEBUG:-0}" -eq 1 ] && echo "🔍 $1"; }
+    log_info() { echo "ℹ️  $1"; }
+    log_error() { echo "❌ $1"; }
+    log_variables() { :; }
+    log_command() { eval "$1"; }
+    get_log_file() { echo "No log file available"; }
+fi
+
 # Display usage
 usage() {
     cat << EOF
@@ -50,6 +66,7 @@ Options:
   --no-start        Don't start the container after creation
   --force           Overwrite existing codespace
   --debug           Enable debug output
+  --verbose         Enable verbose logging with real-time output
 
 Examples:
   $0 git@github.com:facebook/react.git
@@ -113,6 +130,10 @@ parse_arguments() {
                 ;;
             --debug)
                 export DEBUG=1
+                shift
+                ;;
+            --verbose)
+                export VERBOSE=1
                 shift
                 ;;
             git@*|https://github.com/*|http://github.com/*|https://gitlab.com/*|http://gitlab.com/*|*.git)
@@ -205,14 +226,20 @@ create_codespace() {
     echo "Repository: $REPO_URL"
     echo ""
     
+    log_info "Starting codespace creation: $SAFE_NAME"
+    log_info "Repository URL: $REPO_URL"
+    log_variables "Initial Config" SAFE_NAME REPO_URL CODESPACE_DIR DOCKER_IMAGE LANGUAGE CUSTOM_PORTS FORCE NO_START
+    
     # Clean up if forcing
     if [ -d "$CODESPACE_DIR" ] && [ "$FORCE" == "true" ]; then
         echo_warning "Removing existing codespace..."
+        log_info "Force flag enabled, removing existing codespace"
         if [ -f "$CODESPACE_DIR/docker-compose.yml" ]; then
-            docker-compose -f "$CODESPACE_DIR/docker-compose.yml" down 2>/dev/null || true
+            log_command "docker-compose -f \"$CODESPACE_DIR/docker-compose.yml\" down" "Stopping existing containers"
         fi
         unregister_codespace_ports "$SAFE_NAME"
         rm -rf "$CODESPACE_DIR"
+        log_info "Existing codespace removed"
     fi
     
     # Create directory structure

@@ -17,9 +17,23 @@ else
     echo_error() { echo "❌ $1"; }
 fi
 
+# Source logging utilities
+if [ -f "$SCRIPT_DIR/../../utils/logging.sh" ]; then
+    source "$SCRIPT_DIR/../../utils/logging.sh"
+else
+    # Fallback logging functions
+    log_debug() { [ "${DEBUG:-0}" -eq 1 ] && echo "🔍 $1"; }
+    log_info() { echo "ℹ️  $1"; }
+    log_error() { echo "❌ $1"; }
+    log_file_content() { :; }
+    log_variables() { :; }
+fi
+
 # Generate basic docker-compose configuration
 generate_basic_compose() {
     # Use global config array - no parameters needed
+    log_info "Generating basic docker-compose configuration"
+    
     # Extract configuration
     local container_name="${config[container_name]}"
     local image="${config[image]:-codercom/code-server:latest}"
@@ -30,6 +44,9 @@ generate_basic_compose() {
     local networks="${config[networks]:-}"
     local labels="${config[labels]:-}"
     local healthcheck="${config[healthcheck]:-true}"
+    
+    # Log configuration values
+    log_variables "Docker Compose Config" container_name image password ports env_vars volumes networks labels healthcheck
     
     cat << EOF
 version: '3.8'
@@ -54,9 +71,21 @@ EOF
     
     # Add ports
     echo "    ports:"
-    echo "$ports" | while IFS= read -r port; do
-        echo "      - \"$port\""
-    done
+    if [ -n "$ports" ]; then
+        # Split comma-separated ports and add each one
+        IFS=',' read -ra PORT_ARRAY <<< "$ports"
+        for port in "${PORT_ARRAY[@]}"; do
+            # Trim whitespace
+            port=$(echo "$port" | xargs)
+            if [ -n "$port" ]; then
+                echo "      - \"$port\""
+                log_debug "Added port mapping: $port"
+            fi
+        done
+    else
+        log_warning "No ports specified in configuration"
+        echo "      - \"8080:8080\""
+    fi
     
     # Add volumes
     echo "    volumes:"
@@ -84,9 +113,17 @@ EOF
     
     # Add labels
     echo "    labels:"
-    echo "$labels" | while IFS= read -r label; do
-        echo "      - \"$label\""
-    done
+    if [ -n "$labels" ]; then
+        # Convert \n to actual newlines and process each label
+        echo -e "$labels" | while IFS= read -r label; do
+            if [ -n "$label" ]; then
+                echo "      - \"$label\""
+                log_debug "Added label: $label"
+            fi
+        done
+    else
+        log_debug "No labels specified"
+    fi
     
     # Add command
     echo "    command: >"
@@ -197,21 +234,41 @@ generate_from_devcontainer() {
 validate_compose() {
     local compose_file="$1"
     
+    log_info "Validating docker-compose file: $compose_file"
+    
     if [ ! -f "$compose_file" ]; then
         echo_error "Compose file not found: $compose_file"
+        log_error "Compose file not found: $compose_file"
         return 1
     fi
     
+    # Log the generated compose file content
+    log_file_content "$compose_file" "Generated docker-compose.yml"
+    
     # Basic validation with docker-compose
     if command -v docker-compose >/dev/null 2>&1; then
-        if docker-compose -f "$compose_file" config >/dev/null 2>&1; then
+        log_info "Running docker-compose validation"
+        
+        # Capture both stdout and stderr
+        local validation_output
+        local validation_exit_code
+        
+        if validation_output=$(docker-compose -f "$compose_file" config 2>&1); then
+            validation_exit_code=0
+            log_info "Docker compose validation successful"
+            log_debug "Validation output: $validation_output"
             echo_success "Docker compose file is valid"
             return 0
         else
+            validation_exit_code=$?
+            log_error "Docker compose validation failed (exit code: $validation_exit_code)"
+            log_error "Validation error output: $validation_output"
             echo_error "Docker compose file validation failed"
+            echo_error "Check log file for details: $(get_log_file)"
             return 1
         fi
     else
+        log_warning "docker-compose command not found, skipping validation"
         echo_warning "docker-compose not found, skipping validation"
         return 0
     fi
