@@ -278,6 +278,93 @@ cmd_update() {
     success "Updated to latest version"
 }
 
+cmd_cleanup() {
+    info "Cleaning up Michael's Codespaces (soft cleanup)..."
+    
+    # Stop all running containers
+    warning "Stopping all codespace containers..."
+    for dir in "$CODESPACES_DIR"/*/; do
+        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
+            local basename=$(basename "$dir")
+            if [[ ! "$basename" =~ ^(shared|auth|backups|scripts)$ ]]; then
+                docker-compose -f "$dir/docker-compose.yml" stop 2>/dev/null || true
+            fi
+        fi
+    done
+    
+    # Remove MCS directories and files
+    warning "Removing MCS directories..."
+    rm -rf "$CODESPACES_DIR"
+    rm -rf "$CODESPACE_HOME"
+    
+    # Remove aliases from shell config
+    if [ -f ~/.zshrc ]; then
+        warning "Removing MCS aliases from .zshrc..."
+        sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.zshrc
+        sed -i.bak '/# Codespace:/,+1d' ~/.zshrc
+    fi
+    
+    if [ -f ~/.bashrc ]; then
+        warning "Removing MCS aliases from .bashrc..."
+        sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.bashrc
+    fi
+    
+    # Remove monitoring script
+    rm -f ~/monitor-system.sh
+    
+    success "Cleanup complete! Docker and system packages remain installed."
+    echo ""
+    echo "To reinstall, run the installer again."
+}
+
+cmd_destroy() {
+    warning "This will completely remove Michael's Codespaces AND all system dependencies!"
+    warning "This includes: Docker, docker-compose, and all containers/images"
+    echo ""
+    read -p "Are you ABSOLUTELY sure? Type 'DESTROY' to confirm: " -r
+    
+    if [[ $REPLY == "DESTROY" ]]; then
+        info "Starting complete destruction..."
+        
+        # First do the soft cleanup
+        cmd_cleanup
+        
+        # Remove all Docker containers and images
+        warning "Removing ALL Docker containers and images..."
+        docker stop $(docker ps -aq) 2>/dev/null || true
+        docker rm $(docker ps -aq) 2>/dev/null || true
+        docker rmi $(docker images -q) 2>/dev/null || true
+        docker system prune -af 2>/dev/null || true
+        
+        # Uninstall Docker
+        warning "Uninstalling Docker..."
+        if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get remove -y docker-ce docker-ce-cli containerd.io docker-compose
+            sudo apt-get autoremove -y
+            sudo rm -rf /var/lib/docker
+            sudo rm -rf /var/lib/containerd
+        fi
+        
+        # Remove Docker group
+        if getent group docker >/dev/null; then
+            sudo groupdel docker 2>/dev/null || true
+        fi
+        
+        # Reset shell to bash if using zsh
+        if [ "$SHELL" = "/usr/bin/zsh" ] || [ "$SHELL" = "/bin/zsh" ]; then
+            warning "Resetting shell to bash..."
+            chsh -s /bin/bash
+        fi
+        
+        success "Complete destruction finished!"
+        warning "You may need to logout and login again for all changes to take effect."
+        echo ""
+        echo "Your VM is now back to its original state."
+    else
+        echo "Destruction cancelled."
+    fi
+}
+
 cmd_doctor() {
     printf "${tty_bold}Michael's Codespaces Doctor${tty_reset}\n"
     echo "─────────────────────────────"
@@ -345,6 +432,8 @@ ${tty_bold}Commands:${tty_reset}
   ${tty_cyan}info${tty_reset} <name>           Show detailed information about a codespace
   ${tty_cyan}status${tty_reset}                Show system and codespaces status
   ${tty_cyan}update${tty_reset}                Update Michael's Codespaces to latest version
+  ${tty_cyan}cleanup${tty_reset}               Remove MCS but keep Docker/system packages (soft cleanup)
+  ${tty_cyan}destroy${tty_reset}               Completely remove MCS and all dependencies (factory reset)
   ${tty_cyan}doctor${tty_reset}                Check system health and configuration
   ${tty_cyan}help${tty_reset}                  Show this help message
 
@@ -358,6 +447,10 @@ ${tty_bold}Examples:${tty_reset}
 ${tty_bold}Shortcuts:${tty_reset}
   mcs ls                 Alias for 'list'
   mcs rm                 Alias for 'remove'
+
+${tty_bold}Cleanup Options:${tty_reset}
+  mcs cleanup            Removes MCS files but keeps Docker installed
+  mcs destroy            Complete uninstall (requires typing 'DESTROY' to confirm)
 
 ${tty_bold}More info:${tty_reset} https://github.com/michaelkeevildown/ubuntu-codespace
 EOF
@@ -405,6 +498,12 @@ case "${1:-help}" in
         ;;
     update|upgrade)
         cmd_update
+        ;;
+    cleanup|clean)
+        cmd_cleanup
+        ;;
+    destroy|uninstall)
+        cmd_destroy
         ;;
     doctor|check)
         cmd_doctor
