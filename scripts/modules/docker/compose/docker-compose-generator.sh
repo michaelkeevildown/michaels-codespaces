@@ -123,13 +123,8 @@ EOF
         log_debug "No labels specified"
     fi
     
-    # Add command
-    echo "    command: |"
-    echo "      sh -c \""
-    echo "        git config --global user.name '\$\$(cat /home/coder/.ssh/../codespaces/auth/git-config/name 2>/dev/null || echo '')' &&"
-    echo "        git config --global user.email '\$\$(cat /home/coder/.ssh/../codespaces/auth/git-config/email 2>/dev/null || echo '')' &&"
-    echo "        code-server --bind-addr 0.0.0.0:8080 --auth password"
-    echo "      \""
+    # Add command - code-server runs with its own entrypoint
+    echo "    command: [\"--bind-addr\", \"0.0.0.0:8080\", \"--auth\", \"password\"]"
     
     # Add healthcheck if enabled
     if [ "$healthcheck" == "true" ]; then
