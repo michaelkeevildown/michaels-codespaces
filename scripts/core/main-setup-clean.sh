@@ -5,12 +5,34 @@
 
 set -e
 
+# Error handler
+error_handler() {
+    local line_no=$1
+    local bash_lineno=$2
+    local last_command=$3
+    echo ""
+    echo "ERROR: Script failed at line $line_no"
+    echo "Command: $last_command"
+    echo "Exit code: $?"
+    echo ""
+    echo "Debug info:"
+    echo "  NONINTERACTIVE: ${NONINTERACTIVE:-not set}"
+    echo "  Terminal: stdin=$([ -t 0 ] && echo "yes" || echo "no"), stdout=$([ -t 1 ] && echo "yes" || echo "no")"
+    exit 1
+}
+
+# Set error trap
+trap 'error_handler ${LINENO} ${BASH_LINENO} "$BASH_COMMAND"' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Debug mode
 if [ "${DEBUG:-0}" = "1" ]; then
     set -x
+    echo "DEBUG: Script starting"
+    echo "DEBUG: NONINTERACTIVE=${NONINTERACTIVE:-not set}"
+    echo "DEBUG: Terminal detection: stdin=$([ -t 0 ] && echo "yes" || echo "no"), stdout=$([ -t 1 ] && echo "yes" || echo "no")"
 fi
 
 # Source utilities
@@ -75,6 +97,16 @@ printf "${COLOR_BOLD}Michael's Codespaces Installer${COLOR_RESET}\n"
 echo "=============================="
 echo ""
 
+# Debug environment
+if [ "${DEBUG:-0}" = "1" ]; then
+    echo "DEBUG: Environment check"
+    echo "  PWD: $PWD"
+    echo "  SCRIPT_DIR: $SCRIPT_DIR"
+    echo "  PATH: $PATH"
+    echo "  Shell: $SHELL"
+    echo ""
+fi
+
 # Show what will be installed
 ohai "This script will install:"
 for i in "${!SETUP_MODULES[@]}"; do
@@ -85,13 +117,25 @@ echo ""
 
 # Simple confirmation
 if [ "${NONINTERACTIVE:-}" != "1" ]; then
-    printf "Press ${COLOR_BOLD}RETURN${COLOR_RESET} to continue or any other key to abort: "
-    read -r REPLY
-    if [ -n "$REPLY" ]; then
-        onoe "Installation aborted"
-        exit 1
+    # Check if we can actually read from stdin
+    if [ -t 0 ]; then
+        printf "Press ${COLOR_BOLD}RETURN${COLOR_RESET} to continue or any other key to abort: "
+        # Use timeout to prevent hanging
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 60 bash -c 'read -r REPLY; echo "$REPLY"' || REPLY=""
+        else
+            read -r REPLY || REPLY=""
+        fi
+        
+        if [ -n "$REPLY" ]; then
+            onoe "Installation aborted"
+            exit 1
+        fi
+        echo ""
+    else
+        # No terminal available, run non-interactively
+        ohai "No terminal detected, running non-interactively"
     fi
-    echo ""
 else
     ohai "Running in non-interactive mode"
 fi

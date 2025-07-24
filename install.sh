@@ -124,18 +124,42 @@ main() {
     
     # Run main setup with clean UI
     if [ -f ./scripts/core/main-setup-clean.sh ] && [ "${USE_SIMPLE_UI:-0}" != "1" ]; then
-        # Set NONINTERACTIVE if we're not in a terminal or if requested
-        if [ ! -t 0 ] || [ ! -t 1 ] || [ "${NONINTERACTIVE:-0}" = "1" ]; then
-            export NONINTERACTIVE=1
+        # Debug logging
+        if [ "${DEBUG:-0}" = "1" ]; then
+            info "DEBUG: Terminal detection:"
+            echo "  stdin is terminal: $([ -t 0 ] && echo "yes" || echo "no")"
+            echo "  stdout is terminal: $([ -t 1 ] && echo "yes" || echo "no")"
+            echo "  NONINTERACTIVE env: ${NONINTERACTIVE:-not set}"
+            echo "  PS1: ${PS1:-not set}"
+            echo "  Running via curl: ${BASH_SOURCE[0]}"
         fi
         
-        if ! ./scripts/core/main-setup-clean.sh; then
+        # Always set NONINTERACTIVE when running through curl/wget
+        # Check if we're running from a pipe (curl | bash)
+        if [ -z "${PS1:-}" ] || [ ! -t 0 ] || [ ! -t 1 ] || [ "${NONINTERACTIVE:-0}" = "1" ]; then
+            export NONINTERACTIVE=1
+            [ "${DEBUG:-0}" = "1" ] && info "DEBUG: Setting NONINTERACTIVE=1"
+        fi
+        
+        # Create error log
+        ERROR_LOG="/tmp/mcs-install-error-$(date +%s).log"
+        
+        if ! ./scripts/core/main-setup-clean.sh 2>&1 | tee "$ERROR_LOG"; then
             error "Setup failed during installation"
             echo ""
-            echo "You can try running with simple UI:"
-            echo "  USE_SIMPLE_UI=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
+            echo "Error log saved to: $ERROR_LOG"
+            echo "Last 10 lines of error log:"
+            tail -10 "$ERROR_LOG"
             echo ""
-            echo "Or check the logs in /tmp/mcs-setup-*.log"
+            echo "You can try:"
+            echo "  1. Run with debug mode:"
+            echo "     DEBUG=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
+            echo ""
+            echo "  2. Run with simple UI:"
+            echo "     USE_SIMPLE_UI=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
+            echo ""
+            echo "  3. Force non-interactive mode:"
+            echo "     NONINTERACTIVE=1 CODESPACE_BRANCH=$CODESPACE_BRANCH /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/ubuntu-codespace/$CODESPACE_BRANCH/install.sh)\""
             exit 1
         fi
     else
