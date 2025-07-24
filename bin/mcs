@@ -279,22 +279,11 @@ cmd_update() {
 }
 
 cmd_cleanup() {
-    info "Cleaning up Michael's Codespaces (soft cleanup)..."
+    info "Cleaning up Michael's Codespaces installation (soft cleanup)..."
+    warning "Note: Your codespace containers will continue running"
     
-    # Stop all running containers
-    warning "Stopping all codespace containers..."
-    for dir in "$CODESPACES_DIR"/*/; do
-        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
-            local basename=$(basename "$dir")
-            if [[ ! "$basename" =~ ^(shared|auth|backups|scripts)$ ]]; then
-                docker-compose -f "$dir/docker-compose.yml" stop 2>/dev/null || true
-            fi
-        fi
-    done
-    
-    # Remove MCS directories and files
-    warning "Removing MCS directories..."
-    rm -rf "$CODESPACES_DIR"
+    # Remove MCS installation directory only
+    warning "Removing MCS installation files..."
     rm -rf "$CODESPACE_HOME"
     
     # Remove aliases from shell config
@@ -312,54 +301,139 @@ cmd_cleanup() {
     # Remove monitoring script
     rm -f ~/monitor-system.sh
     
-    success "Cleanup complete! Docker and system packages remain installed."
+    # Remove mcs from PATH (if it was added)
+    if [ -f ~/.zshrc ]; then
+        sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.zshrc
+    fi
+    if [ -f ~/.bashrc ]; then
+        sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.bashrc
+    fi
+    
+    success "MCS installation removed!"
     echo ""
-    echo "To reinstall, run the installer again."
+    echo "✓ Your codespaces in ~/codespaces are preserved"
+    echo "✓ All running containers are still active"
+    echo "✓ Docker remains installed"
+    echo ""
+    echo "To reinstall MCS, run the installer again."
 }
 
 cmd_destroy() {
-    warning "This will completely remove Michael's Codespaces AND all system dependencies!"
-    warning "This includes: Docker, docker-compose, and all containers/images"
+    warning "This will remove Michael's Codespaces and optionally its dependencies"
     echo ""
-    read -p "Are you ABSOLUTELY sure? Type 'DESTROY' to confirm: " -r
+    read -p "Are you sure you want to continue? Type 'DESTROY' to confirm: " -r
     
     if [[ $REPLY == "DESTROY" ]]; then
-        info "Starting complete destruction..."
+        info "Starting destruction process..."
         
-        # First do the soft cleanup
-        cmd_cleanup
+        # Always remove MCS files and codespaces
+        warning "Removing all MCS directories and codespaces..."
         
-        # Remove all Docker containers and images
-        warning "Removing ALL Docker containers and images..."
-        docker stop $(docker ps -aq) 2>/dev/null || true
-        docker rm $(docker ps -aq) 2>/dev/null || true
-        docker rmi $(docker images -q) 2>/dev/null || true
-        docker system prune -af 2>/dev/null || true
-        
-        # Uninstall Docker
-        warning "Uninstalling Docker..."
-        if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get remove -y docker-ce docker-ce-cli containerd.io docker-compose
-            sudo apt-get autoremove -y
-            sudo rm -rf /var/lib/docker
-            sudo rm -rf /var/lib/containerd
+        # Stop all running containers first
+        if docker ps -q 2>/dev/null | grep -q .; then
+            warning "Stopping all Docker containers..."
+            docker stop $(docker ps -aq) 2>/dev/null || true
         fi
         
-        # Remove Docker group
-        if getent group docker >/dev/null; then
-            sudo groupdel docker 2>/dev/null || true
+        # Remove all MCS directories
+        rm -rf "$CODESPACES_DIR"
+        rm -rf "$CODESPACE_HOME"
+        rm -f ~/monitor-system.sh
+        
+        # Remove aliases from shell configs
+        if [ -f ~/.zshrc ]; then
+            sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.zshrc
+            sed -i.bak '/# Codespace:/,+1d' ~/.zshrc
+            sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.zshrc
         fi
         
-        # Reset shell to bash if using zsh
-        if [ "$SHELL" = "/usr/bin/zsh" ] || [ "$SHELL" = "/bin/zsh" ]; then
-            warning "Resetting shell to bash..."
-            chsh -s /bin/bash
+        if [ -f ~/.bashrc ]; then
+            sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.bashrc
+            sed -i.bak '/export PATH.*\.ubuntu-codespace\/bin/d' ~/.bashrc
         fi
         
-        success "Complete destruction finished!"
-        warning "You may need to logout and login again for all changes to take effect."
+        success "MCS files and codespaces removed"
+        
+        # Ask about Docker
         echo ""
-        echo "Your VM is now back to its original state."
+        read -p "Do you want to uninstall Docker and remove all containers/images? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            warning "Removing ALL Docker resources..."
+            docker rm $(docker ps -aq) 2>/dev/null || true
+            docker rmi $(docker images -q) 2>/dev/null || true
+            docker volume rm $(docker volume ls -q) 2>/dev/null || true
+            docker network rm $(docker network ls -q | grep -v bridge | grep -v host | grep -v none) 2>/dev/null || true
+            docker system prune -af --volumes 2>/dev/null || true
+            
+            warning "Uninstalling Docker..."
+            if command -v apt-get >/dev/null 2>&1; then
+                sudo systemctl stop docker 2>/dev/null || true
+                sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
+                sudo apt-get purge -y docker-compose
+                sudo apt-get autoremove -y
+                sudo rm -rf /var/lib/docker
+                sudo rm -rf /var/lib/containerd
+                sudo rm -rf /etc/docker
+            fi
+            
+            # Remove Docker group
+            if getent group docker >/dev/null; then
+                sudo groupdel docker 2>/dev/null || true
+            fi
+            
+            success "Docker completely removed"
+        else
+            info "Docker installation preserved"
+        fi
+        
+        # Ask about Oh My Zsh
+        if [ -d ~/.oh-my-zsh ]; then
+            echo ""
+            read -p "Do you want to remove Oh My Zsh and revert to bash? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                warning "Removing Oh My Zsh..."
+                rm -rf ~/.oh-my-zsh
+                if [ -f ~/.zshrc.pre-oh-my-zsh ]; then
+                    mv ~/.zshrc.pre-oh-my-zsh ~/.zshrc
+                fi
+                
+                # Reset shell to bash
+                if [ "$SHELL" = "/usr/bin/zsh" ] || [ "$SHELL" = "/bin/zsh" ]; then
+                    warning "Resetting shell to bash..."
+                    chsh -s /bin/bash
+                fi
+                
+                success "Oh My Zsh removed and shell reset to bash"
+            else
+                info "Oh My Zsh preserved"
+            fi
+        fi
+        
+        # Ask about development packages
+        echo ""
+        read -p "Do you want to remove development packages (nodejs, npm, etc.)? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            warning "Removing development packages..."
+            sudo apt-get remove -y nodejs npm zsh 2>/dev/null || true
+            sudo apt-get autoremove -y
+            success "Development packages removed"
+        else
+            info "Development packages preserved"
+        fi
+        
+        echo ""
+        success "Destruction process completed!"
+        echo ""
+        echo "Summary:"
+        echo "✓ MCS completely removed"
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "✓ Docker uninstalled"
+        fi
+        echo ""
+        warning "Please logout and login again for all changes to take effect."
     else
         echo "Destruction cancelled."
     fi
