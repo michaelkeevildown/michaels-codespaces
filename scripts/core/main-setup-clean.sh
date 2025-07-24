@@ -86,12 +86,14 @@ echo ""
 # Simple confirmation
 if [ "${NONINTERACTIVE:-}" != "1" ]; then
     printf "Press ${COLOR_BOLD}RETURN${COLOR_RESET} to continue or any other key to abort: "
-    read -r
+    read -r REPLY
     if [ -n "$REPLY" ]; then
         onoe "Installation aborted"
         exit 1
     fi
     echo ""
+else
+    ohai "Running in non-interactive mode"
 fi
 
 # Run each module

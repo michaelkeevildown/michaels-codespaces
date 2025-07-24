@@ -124,6 +124,11 @@ main() {
     
     # Run main setup with clean UI
     if [ -f ./scripts/core/main-setup-clean.sh ] && [ "${USE_SIMPLE_UI:-0}" != "1" ]; then
+        # Set NONINTERACTIVE if we're not in a terminal or if requested
+        if [ ! -t 0 ] || [ ! -t 1 ] || [ "${NONINTERACTIVE:-0}" = "1" ]; then
+            export NONINTERACTIVE=1
+        fi
+        
         if ! ./scripts/core/main-setup-clean.sh; then
             error "Setup failed during installation"
             echo ""
