@@ -510,6 +510,8 @@ ${tty_bold}Options:${tty_reset}
   --env-file <file>  Environment variables file
   --no-start         Don't start the container after creation
   --force            Overwrite existing codespace
+  --shallow           Use shallow clone (depth=1) for faster cloning
+  --depth <n>        Clone depth (1=shallow, 0=full history, default: auto-detect)
   --debug            Enable debug output
 
 ${tty_bold}Examples:${tty_reset}
@@ -517,6 +519,11 @@ ${tty_bold}Examples:${tty_reset}
   mcs create https://github.com/nodejs/node.git --language node
   mcs create git@github.com:user/repo.git --name my-project --ports "8090:8080"
   mcs create git@github.com:user/repo.git --image python:3.11 --env-file .env
+  mcs create https://github.com/homebrew/homebrew-core.git --shallow
+  mcs create https://github.com/torvalds/linux.git --depth 10
+
+${tty_bold}Note:${tty_reset} Large repositories (homebrew-core, linux, chromium, etc.) will 
+automatically use shallow clone unless --depth 0 is specified.
 
 EOF
 }

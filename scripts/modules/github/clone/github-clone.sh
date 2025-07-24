@@ -24,16 +24,50 @@ else
     echo_debug() { [ "${DEBUG:-0}" -eq 1 ] && echo "🔍 $1"; }
 fi
 
+# List of known large repositories that should be shallow cloned
+LARGE_REPOS=(
+    "homebrew/homebrew-core"
+    "homebrew/homebrew-cask"
+    "torvalds/linux"
+    "chromium/chromium"
+    "microsoft/vscode"
+    "llvm/llvm-project"
+)
+
+# Check if repository is known to be large
+is_large_repository() {
+    local repo_url="$1"
+    local repo_path=""
+    
+    # Extract repository path from URL
+    if [[ "$repo_url" =~ github\.com[:/]([^/]+/[^/\.]+)(\.git)?$ ]]; then
+        repo_path="${BASH_REMATCH[1]}"
+        repo_path=$(echo "$repo_path" | tr '[:upper:]' '[:lower:]')
+    else
+        return 1
+    fi
+    
+    # Check against known large repos
+    for large_repo in "${LARGE_REPOS[@]}"; do
+        if [[ "$repo_path" == "$(echo "$large_repo" | tr '[:upper:]' '[:lower:]')" ]]; then
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
 # Clone repository with authentication and progress
 clone_repository() {
     local repo_url="$1"
     local target_dir="$2"
     local branch="${3:-}"
     local depth="${4:-}"
+    local force_shallow="${5:-false}"
     
     # Validate inputs
     if [ -z "$repo_url" ] || [ -z "$target_dir" ]; then
-        echo_error "Usage: clone_repository <repo_url> <target_dir> [branch] [depth]"
+        echo_error "Usage: clone_repository <repo_url> <target_dir> [branch] [depth] [force_shallow]"
         return 1
     fi
     
@@ -45,6 +79,18 @@ clone_repository() {
     
     # Create target directory
     mkdir -p "$target_dir"
+    
+    # Check if this is a large repository and auto-enable shallow clone
+    if [ -z "$depth" ] && is_large_repository "$repo_url"; then
+        echo_warning "Detected large repository. Using shallow clone (depth=1) for faster cloning."
+        echo_info "To clone with full history, use: mcs create $repo_url --depth 0"
+        depth="1"
+    fi
+    
+    # Force shallow if requested
+    if [ "$force_shallow" == "true" ] && [ -z "$depth" ]; then
+        depth="1"
+    fi
     
     # Get authenticated URL
     local auth_url=$(convert_to_auth_url "$repo_url")
@@ -58,21 +104,36 @@ clone_repository() {
         clone_cmd="$clone_cmd --branch $branch"
     fi
     
-    # Add depth if specified
-    if [ -n "$depth" ]; then
+    # Add depth if specified (depth=0 means full clone)
+    if [ -n "$depth" ] && [ "$depth" != "0" ]; then
         clone_cmd="$clone_cmd --depth $depth"
+        echo_info "Using shallow clone with depth=$depth"
     fi
     
-    # Add progress flag
-    clone_cmd="$clone_cmd --progress"
+    # Add progress and verbose flags
+    clone_cmd="$clone_cmd --progress --verbose"
     
     # Clone with error handling
     echo_info "Cloning repository..."
+    if [ -n "$depth" ] && [ "$depth" != "0" ]; then
+        echo_info "This is a shallow clone. Only recent history will be included."
+    fi
     
-    # Use a temporary file for stderr to parse progress
+    # Use a temporary file for stderr but also show progress in real-time
     local temp_err=$(mktemp)
+    local temp_out=$(mktemp)
     
-    if $clone_cmd "$auth_url" "$target_dir" 2>"$temp_err"; then
+    # Run git clone with real-time output
+    if { $clone_cmd "$auth_url" "$target_dir" 2>&1 1>&3 3>&- | tee "$temp_err" | while IFS= read -r line; do
+        # Show progress lines in real-time
+        if [[ "$line" =~ "Counting objects:" ]] || [[ "$line" =~ "Compressing objects:" ]] || 
+           [[ "$line" =~ "Receiving objects:" ]] || [[ "$line" =~ "Resolving deltas:" ]] ||
+           [[ "$line" =~ "Checking out files:" ]]; then
+            echo "  $line"
+        elif [[ "$line" =~ "Cloning into" ]]; then
+            echo_info "$line"
+        fi
+    done; } 3>&1 1>"$temp_out"; then
         echo_success "Repository cloned successfully"
         
         # Remove authentication from remote URL for security
@@ -82,12 +143,12 @@ clone_repository() {
             cd - >/dev/null
         fi
         
-        rm -f "$temp_err"
+        rm -f "$temp_err" "$temp_out"
         return 0
     else
         local exit_code=$?
         local error_msg=$(cat "$temp_err")
-        rm -f "$temp_err"
+        rm -f "$temp_err" "$temp_out"
         
         # Parse common error messages
         if echo "$error_msg" | grep -q "Authentication failed"; then
@@ -116,13 +177,16 @@ clone_with_retry() {
     local target_dir="$2"
     local max_retries="${3:-3}"
     local retry_delay="${4:-5}"
+    local branch="${5:-}"
+    local depth="${6:-}"
+    local force_shallow="${7:-false}"
     
     local attempt=1
     
     while [ $attempt -le $max_retries ]; do
         echo_info "Clone attempt $attempt of $max_retries"
         
-        if clone_repository "$repo_url" "$target_dir"; then
+        if clone_repository "$repo_url" "$target_dir" "$branch" "$depth" "$force_shallow"; then
             return 0
         fi
         
@@ -188,6 +252,7 @@ parse_devcontainer_image() {
 }
 
 # Export functions
+export -f is_large_repository
 export -f clone_repository
 export -f clone_with_retry
 export -f check_devcontainer

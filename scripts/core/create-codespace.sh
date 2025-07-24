@@ -65,6 +65,8 @@ Options:
   --env-file <file> Environment variables file
   --no-start        Don't start the container after creation
   --force           Overwrite existing codespace
+  --shallow         Use shallow clone (depth=1) for faster cloning
+  --depth <n>       Clone depth (1=shallow, 0=full history, default: auto-detect)
   --debug           Enable debug output
   --verbose         Enable verbose logging with real-time output
 
@@ -72,6 +74,8 @@ Examples:
   $0 git@github.com:facebook/react.git
   $0 https://github.com/nodejs/node.git --language node
   $0 git@github.com:user/repo.git --name my-project --ports "8090:8080"
+  $0 https://github.com/homebrew/homebrew-core.git --shallow
+  $0 git@github.com:torvalds/linux.git --depth 10
 
 EOF
 }
@@ -86,6 +90,8 @@ parse_arguments() {
     ENV_FILE=""
     NO_START=false
     FORCE=false
+    FORCE_SHALLOW=false
+    CLONE_DEPTH=""
     
     # Check for help
     if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
@@ -127,6 +133,18 @@ parse_arguments() {
             --force)
                 FORCE=true
                 shift
+                ;;
+            --shallow)
+                FORCE_SHALLOW=true
+                shift
+                ;;
+            --depth)
+                CLONE_DEPTH="$2"
+                if ! [[ "$CLONE_DEPTH" =~ ^[0-9]+$ ]]; then
+                    echo_error "Clone depth must be a number: $CLONE_DEPTH"
+                    exit 1
+                fi
+                shift 2
                 ;;
             --debug)
                 export DEBUG=1
@@ -252,7 +270,7 @@ create_codespace() {
     
     # Clone repository
     echo_info "Cloning repository..."
-    if ! clone_with_retry "$REPO_URL" "$CODESPACE_DIR/src" 3 5; then
+    if ! clone_with_retry "$REPO_URL" "$CODESPACE_DIR/src" 3 5 "" "$CLONE_DEPTH" "$FORCE_SHALLOW"; then
         echo_error "Failed to clone repository"
         rm -rf "$CODESPACE_DIR"
         exit 1
