@@ -47,14 +47,27 @@ else
         echo "   ${COLOR_CYAN}${COLOR_UNDERLINE}https://github.com/settings/tokens/new${COLOR_RESET}"
         echo ""
         echo "2. ${COLOR_BLUE}Configure token:${COLOR_RESET}"
-        echo "   • Note: ${COLOR_DIM}Michael's Codespaces - $(hostname)${COLOR_RESET}"
-        echo "   • Expiration: ${COLOR_DIM}90 days${COLOR_RESET}"
-        echo "   • Scopes: ${COLOR_GREEN}✓${COLOR_RESET} repo, workflow, write:packages"
+        echo "   • ${COLOR_BOLD}Note:${COLOR_RESET} Michael's Codespaces - $(hostname)"
+        echo "   • ${COLOR_BOLD}Expiration:${COLOR_RESET} 90 days (recommended)"
+        echo ""
+        echo "   ${COLOR_BOLD}Select scopes - Check these boxes:${COLOR_RESET}"
+        echo "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}repo${COLOR_RESET} (Full control of private repositories)"
+        echo "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}workflow${COLOR_RESET} (Update GitHub Action workflows)"  
+        echo "   ${COLOR_GREEN}✓${COLOR_RESET} ${COLOR_BOLD}write:packages${COLOR_RESET} (Upload packages to GitHub Package Registry)"
+        echo ""
+        echo "   ${COLOR_DIM}Note: The 'repo' scope includes:${COLOR_RESET}"
+        echo "   ${COLOR_DIM}• repo:status, repo_deployment, public_repo, repo:invite, security_events${COLOR_RESET}"
         echo ""
         echo "3. ${COLOR_BLUE}Generate & copy token${COLOR_RESET} ${COLOR_DIM}(starts with ghp_)${COLOR_RESET}"
         echo_box_end 50
         
-        # Prompt for token
+        # Prompt for token with better guidance
+        echo ""
+        printf "${COLOR_BOLD}Ready to paste your token?${COLOR_RESET}\n"
+        printf "${COLOR_DIM}• Make sure you checked: repo, workflow, write:packages${COLOR_RESET}\n"
+        printf "${COLOR_DIM}• Token should start with 'ghp_' and be 40 characters long${COLOR_RESET}\n"
+        echo ""
+        
         while true; do
             echo -n "Paste your GitHub token here: "
             read -s GITHUB_TOKEN_INPUT
@@ -63,7 +76,12 @@ else
             if [ -z "$GITHUB_TOKEN_INPUT" ]; then
                 echo_warning "Token is required for creating codespaces."
                 echo ""
-                read -p "Do you want to skip token setup? [y/N] " -n 1 -r
+                echo "If you haven't created your token yet:"
+                echo "1. Open: ${COLOR_CYAN}https://github.com/settings/tokens/new${COLOR_RESET}"
+                echo "2. Check the 3 scopes mentioned above"
+                echo "3. Click 'Generate token' and copy it"
+                echo ""
+                read -p "Do you want to skip token setup for now? [y/N] " -n 1 -r
                 echo ""
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                     echo_info "Skipping token setup. You'll need to set it before creating codespaces."
@@ -129,10 +147,23 @@ On the token creation page:
 
 1. **Note**: Enter "Michael's Codespaces - $(hostname)"
 2. **Expiration**: Select "90 days" (recommended for security)
-3. **Select scopes** - Check these boxes:
-   - ✅ `repo` (Full control of private repositories)
-   - ✅ `workflow` (Update GitHub Action workflows)
-   - ✅ `write:packages` (Upload packages to GitHub Package Registry)
+3. **Select scopes** - Check EXACTLY these boxes:
+
+   **✅ repo** - Full control of private repositories
+   This automatically includes:
+   • repo:status - Access commit status
+   • repo_deployment - Access deployment status  
+   • public_repo - Access public repositories
+   • repo:invite - Access repository invitations
+   • security_events - Read and write security events
+
+   **✅ workflow** - Update GitHub Action workflows
+   Required to work with GitHub Actions and CI/CD
+
+   **✅ write:packages** - Upload packages to GitHub Package Registry
+   Needed for publishing packages and container images
+
+   ${COLOR_YELLOW}Important: Only check these 3 main scopes. The sub-scopes under 'repo' are included automatically.${COLOR_RESET}
 4. Scroll down and click the green **"Generate token"** button
 5. **IMPORTANT**: Copy your token immediately! (looks like: ghp_xxxxxxxxxxxx)
 
