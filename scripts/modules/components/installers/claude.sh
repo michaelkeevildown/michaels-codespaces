@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Claude CLI Component Installer
-# Installs Anthropic's Claude CLI tool
+# Claude Code Component Installer
+# Installs Anthropic's Claude Code (claude-code) CLI tool
 
 set -e
 
 # Component metadata
 metadata() {
-    echo "name=Claude CLI"
+    echo "name=Claude Code"
     echo "version=latest"
-    echo "description=Anthropic's Claude AI assistant command-line interface"
+    echo "description=Anthropic's Claude AI coding assistant (claude-code)"
 }
 
 # Component dependencies
@@ -20,22 +20,22 @@ dependencies() {
 
 # Installation function
 install() {
-    echo "Installing Claude CLI..."
+    echo "Installing Claude Code..."
     
     # Check for Node.js
     if ! command -v node >/dev/null 2>&1; then
-        echo "Node.js is required for Claude CLI. Installing Node.js first..."
+        echo "Node.js is required for Claude Code. Installing Node.js first..."
         install_nodejs
     fi
     
-    # Install Claude CLI globally via npm
-    echo "Installing Claude CLI via npm..."
-    npm install -g @anthropic-ai/claude-cli
+    # Install Claude Code globally via npm
+    echo "Installing Claude Code via npm..."
+    npm install -g claude-code@latest
     
-    # Alternative: Install via direct download if npm fails
-    if ! command -v claude >/dev/null 2>&1; then
-        echo "npm installation failed, trying direct download..."
-        install_direct
+    # Alternative: Install via npx if npm global install fails
+    if ! command -v claude-code >/dev/null 2>&1; then
+        echo "Creating claude-code wrapper for npx..."
+        create_npx_wrapper
     fi
 }
 
@@ -72,31 +72,26 @@ install_nodejs() {
     fi
 }
 
-# Direct installation method
-install_direct() {
-    echo "Installing Claude CLI directly..."
+# Create npx wrapper
+create_npx_wrapper() {
+    echo "Creating claude-code wrapper..."
     
-    # Create directory for Claude
-    sudo mkdir -p /opt/claude-cli
+    # Create wrapper script
+    sudo tee /usr/local/bin/claude-code > /dev/null << 'EOF'
+#!/bin/bash
+# Claude Code wrapper script
+exec npx claude-code@latest "$@"
+EOF
     
-    # Download latest Claude CLI
-    # Note: Update this URL when Claude CLI releases are available
-    local claude_url="https://github.com/anthropics/claude-cli/releases/latest/download/claude-linux-x64"
+    # Make executable
+    sudo chmod +x /usr/local/bin/claude-code
     
-    if curl -fsSL -o /tmp/claude "$claude_url"; then
-        sudo mv /tmp/claude /opt/claude-cli/claude
-        sudo chmod +x /opt/claude-cli/claude
-        sudo ln -sf /opt/claude-cli/claude /usr/local/bin/claude
-    else
-        echo "Direct download failed. Claude CLI may not be publicly available yet." >&2
-        echo "Please check https://www.anthropic.com for installation instructions." >&2
-        return 1
-    fi
+    echo "Created claude-code wrapper at /usr/local/bin/claude-code"
 }
 
 # Configuration function
 configure() {
-    echo "Configuring Claude CLI..."
+    echo "Configuring Claude Code..."
     
     # Check for API key in environment or file
     local api_key=""
@@ -109,19 +104,18 @@ configure() {
     fi
     
     if [ -n "$api_key" ]; then
-        # Configure Claude with API key
+        # Configure Claude Code with API key
         export ANTHROPIC_API_KEY="$api_key"
         
         # Create Claude config directory
-        mkdir -p ~/.config/claude
+        mkdir -p ~/.config/claude-code
         
         # Save configuration
-        cat > ~/.config/claude/config.json << EOF
+        cat > ~/.config/claude-code/config.json << EOF
 {
   "api_key": "$api_key",
   "default_model": "claude-3-opus-20240229",
-  "max_tokens": 4096,
-  "temperature": 0.7
+  "enable_caching": true
 }
 EOF
         
@@ -129,11 +123,11 @@ EOF
         echo "export ANTHROPIC_API_KEY='$api_key'" >> ~/.bashrc
         echo "export ANTHROPIC_API_KEY='$api_key'" >> ~/.zshrc 2>/dev/null || true
         
-        echo "Claude CLI configured with API key"
+        echo "Claude Code configured with API key"
     else
         echo "No Anthropic API key found"
-        echo "To configure Claude CLI, set ANTHROPIC_API_KEY environment variable"
-        echo "or save your API key to: $api_key_file"
+        echo "Claude Code will work without an API key (using browser auth)"
+        echo "To use API key auth, save your key to: $api_key_file"
         
         # Create placeholder for API key
         mkdir -p $(dirname "$api_key_file")
@@ -141,41 +135,40 @@ EOF
         chmod 600 "$api_key_file"
     fi
     
-    # Set up Claude aliases
+    # Set up Claude Code aliases
     cat >> ~/.bashrc << 'EOF'
 
-# Claude CLI aliases
-alias claude-opus='claude --model claude-3-opus-20240229'
-alias claude-sonnet='claude --model claude-3-sonnet-20240229'
-alias claude-haiku='claude --model claude-3-haiku-20240307'
+# Claude Code aliases
+alias claude='claude-code'
+alias cc='claude-code'
+alias ccd='claude-code --debug'
 EOF
 }
 
 # Verification function
 verify() {
-    echo "Verifying Claude CLI installation..."
+    echo "Verifying Claude Code installation..."
     
-    # Check if Claude is installed
-    if ! command -v claude >/dev/null 2>&1; then
+    # Check if Claude Code is installed
+    if ! command -v claude-code >/dev/null 2>&1; then
         # Check npm global installation
-        if npm list -g @anthropic-ai/claude-cli >/dev/null 2>&1; then
-            echo "Claude CLI is installed via npm but not in PATH"
+        if npm list -g claude-code >/dev/null 2>&1; then
+            echo "Claude Code is installed via npm but not in PATH"
             echo "You may need to add npm global bin to PATH"
         else
-            echo "Claude CLI not found" >&2
+            echo "Claude Code not found" >&2
             return 1
         fi
     else
-        local version=$(claude --version 2>/dev/null || echo "unknown")
-        echo "Claude CLI installed: $version"
+        local version=$(claude-code --version 2>/dev/null || echo "unknown")
+        echo "Claude Code installed: $version"
     fi
     
     # Check API key configuration
     if [ -n "$ANTHROPIC_API_KEY" ]; then
         echo "Anthropic API key is configured"
     else
-        echo "Anthropic API key is not configured"
-        echo "Set ANTHROPIC_API_KEY to use Claude CLI"
+        echo "Claude Code can work without API key (browser auth)"
     fi
     
     return 0
@@ -183,32 +176,28 @@ verify() {
 
 # Uninstall function
 uninstall() {
-    echo "Uninstalling Claude CLI..."
+    echo "Uninstalling Claude Code..."
     
     # Remove npm package
-    if npm list -g @anthropic-ai/claude-cli >/dev/null 2>&1; then
-        npm uninstall -g @anthropic-ai/claude-cli
+    if npm list -g claude-code >/dev/null 2>&1; then
+        npm uninstall -g claude-code
     fi
     
-    # Remove direct installation
-    if [ -L /usr/local/bin/claude ]; then
-        sudo rm -f /usr/local/bin/claude
-    fi
-    
-    if [ -d /opt/claude-cli ]; then
-        sudo rm -rf /opt/claude-cli
+    # Remove wrapper script
+    if [ -f /usr/local/bin/claude-code ]; then
+        sudo rm -f /usr/local/bin/claude-code
     fi
     
     # Remove configuration
-    rm -rf ~/.config/claude
+    rm -rf ~/.config/claude-code
     
     # Remove from shell profiles
     sed -i '/ANTHROPIC_API_KEY/d' ~/.bashrc 2>/dev/null || true
-    sed -i '/claude-opus/d' ~/.bashrc 2>/dev/null || true
-    sed -i '/claude-sonnet/d' ~/.bashrc 2>/dev/null || true
-    sed -i '/claude-haiku/d' ~/.bashrc 2>/dev/null || true
+    sed -i '/alias claude=/d' ~/.bashrc 2>/dev/null || true
+    sed -i '/alias cc=/d' ~/.bashrc 2>/dev/null || true
+    sed -i '/alias ccd=/d' ~/.bashrc 2>/dev/null || true
     
-    echo "Claude CLI uninstalled"
+    echo "Claude Code uninstalled"
 }
 
 # Main function

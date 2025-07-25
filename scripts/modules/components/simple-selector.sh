@@ -48,16 +48,13 @@ simple_select() {
     
     echo ""
     echo "Presets:"
-    echo "   a) AI Development (GitHub CLI, Claude, Claude Flow)"
-    echo "   f) Full Stack (All tools)"
-    echo "   m) Minimal (GitHub CLI, Git tools)"
-    echo "   d) DevOps (Docker, AWS, Terraform, K8s)"
+    echo "   a) All components (GitHub CLI, Claude Code, Claude Flow)"
     echo "   n) None (skip component installation)"
     echo ""
     
-    read -p "Select components (comma-separated numbers), preset letter, or press Enter for AI Development: " selection
+    read -p "Select components (comma-separated numbers), preset letter, or press Enter for all: " selection
     
-    # Default to AI Development preset if empty
+    # Default to all components if empty
     if [ -z "$selection" ]; then
         selection="a"
     fi
@@ -65,16 +62,7 @@ simple_select() {
     # Handle selection
     case "$selection" in
         a|A)
-            echo "github-cli claude claude-flow git-tools vscode-extensions"
-            ;;
-        f|F)
-            echo "${components[@]}"
-            ;;
-        m|M)
-            echo "github-cli git-tools"
-            ;;
-        d|D)
-            echo "github-cli docker-in-docker aws-cli terraform k8s-tools git-tools"
+            echo "github-cli claude claude-flow"
             ;;
         n|N)
             echo ""

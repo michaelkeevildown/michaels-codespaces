@@ -17,18 +17,9 @@ COMPONENT_DATA=()
 # Register all available components
 register_components() {
     COMPONENT_DATA=(
-        "github-cli|GitHub CLI|Command-line interface for GitHub|github-cli.sh|"
-        "claude|Claude CLI|Anthropic's Claude AI assistant CLI|claude.sh|"
-        "claude-flow|Claude Flow|AI orchestration and workflow tool|claude-flow.sh|claude"
-        "docker-in-docker|Docker in Docker|Run Docker inside containers|docker-in-docker.sh|"
-        "aws-cli|AWS CLI|Amazon Web Services command-line tools|aws-cli.sh|"
-        "terraform|Terraform|Infrastructure as Code tool|terraform.sh|"
-        "node-tools|Node.js Tools|npm, yarn, pnpm package managers|node-tools.sh|"
-        "python-tools|Python Tools|pip, poetry, virtualenv tools|python-tools.sh|"
-        "k8s-tools|Kubernetes Tools|kubectl, helm, k9s|k8s-tools.sh|"
-        "db-clients|Database Clients|PostgreSQL, MySQL, MongoDB clients|db-clients.sh|"
-        "vscode-extensions|VS Code Extensions|Popular extensions pre-installed|vscode-extensions.sh|"
-        "git-tools|Git Tools|git-flow, git-lfs, hub|git-tools.sh|github-cli"
+        "github-cli|GitHub CLI|Command-line interface for GitHub with token authentication|github-cli.sh|"
+        "claude|Claude Code|Anthropic's Claude AI coding assistant (claude-code)|claude.sh|"
+        "claude-flow|Claude Flow|AI swarm orchestration and workflow automation|claude-flow.sh|claude"
     )
 }
 

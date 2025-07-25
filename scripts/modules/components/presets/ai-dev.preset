@@ -9,6 +9,4 @@ PRESET_COMPONENTS=(
     "github-cli"
     "claude"
     "claude-flow"
-    "git-tools"
-    "vscode-extensions"
 )

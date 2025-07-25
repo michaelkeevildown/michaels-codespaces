@@ -28,14 +28,14 @@ install() {
         install_nodejs
     fi
     
-    # Install Claude Flow via npm
+    # Install Claude Flow via npm (using alpha version)
     echo "Installing Claude Flow via npm..."
-    npm install -g claude-flow@latest
+    npm install -g claude-flow@alpha
     
-    # Alternative: Install via direct download
+    # Alternative: Create npx wrapper if npm global install fails
     if ! command -v claude-flow >/dev/null 2>&1; then
-        echo "npm installation failed, trying direct download..."
-        install_direct
+        echo "Creating claude-flow wrapper for npx..."
+        create_npx_wrapper
     fi
     
     # Create Claude Flow directories
@@ -75,29 +75,21 @@ install_nodejs() {
     fi
 }
 
-# Direct installation method
-install_direct() {
-    echo "Installing Claude Flow directly..."
+# Create npx wrapper
+create_npx_wrapper() {
+    echo "Creating claude-flow wrapper..."
     
-    # Clone Claude Flow repository
-    local temp_dir=$(mktemp -d)
+    # Create wrapper script
+    sudo tee /usr/local/bin/claude-flow > /dev/null << 'EOF'
+#!/bin/bash
+# Claude Flow wrapper script
+exec npx claude-flow@alpha "$@"
+EOF
     
-    if git clone https://github.com/ruvnet/claude-flow.git "$temp_dir"; then
-        cd "$temp_dir"
-        
-        # Install dependencies and build
-        npm install
-        npm run build 2>/dev/null || true
-        
-        # Install globally
-        npm link
-        
-        cd - >/dev/null
-        rm -rf "$temp_dir"
-    else
-        echo "Failed to clone Claude Flow repository" >&2
-        return 1
-    fi
+    # Make executable
+    sudo chmod +x /usr/local/bin/claude-flow
+    
+    echo "Created claude-flow wrapper at /usr/local/bin/claude-flow"
 }
 
 # Configuration function
