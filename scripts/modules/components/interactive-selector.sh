@@ -228,8 +228,8 @@ get_selected_components() {
 interactive_select() {
     # Check if terminal supports interactive mode
     if [ ! -t 0 ] || [ ! -t 1 ]; then
-        echo_error "Terminal does not support interactive mode"
-        echo_info "Use --components or --preset flags instead"
+        echo "Terminal does not support interactive mode" >&2
+        echo "Use --components or --preset flags instead" >&2
         return 1
     fi
     
@@ -238,7 +238,7 @@ interactive_select() {
     
     # Check if we have components to display
     if [ ${#MENU_ITEMS[@]} -eq 0 ]; then
-        echo_error "No components available"
+        echo "No components available" >&2
         return 1
     fi
     

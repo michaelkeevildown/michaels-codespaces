@@ -303,10 +303,14 @@ create_codespace() {
         echo_info "Component selection..."
         echo ""
         
-        # Always use simple selection for now - interactive has terminal issues
-        selected_components=$(simple_select) || {
-            echo_warning "Component selection cancelled, continuing without components"
-            selected_components=""
+        # Try interactive selection first, fall back to simple if it fails
+        selected_components=$(interactive_select 2>/dev/null) || {
+            # If interactive fails (no TTY, etc.), use simple selection
+            echo_info "Falling back to simple selection..."
+            selected_components=$(simple_select) || {
+                echo_warning "Component selection cancelled, continuing without components"
+                selected_components=""
+            }
         }
     elif [ -n "$PRESET" ]; then
         echo_info "Loading preset: $PRESET"

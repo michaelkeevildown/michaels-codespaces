@@ -2,6 +2,7 @@
 
 # Component Registry Module
 # Manages available components for container installation
+# Compatible with older Bash versions (no associative arrays)
 
 set -e
 
@@ -9,46 +10,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALLERS_DIR="$SCRIPT_DIR/installers"
 PRESETS_DIR="$SCRIPT_DIR/presets"
 
-# Component metadata structure
-declare -A COMPONENTS
+# Component data stored as delimited strings
+# Format: component_id|name|description|installer|dependencies
+COMPONENT_DATA=()
 
 # Register all available components
 register_components() {
-    # GitHub CLI
-    COMPONENTS[github-cli]="GitHub CLI|Command-line interface for GitHub|github-cli.sh|"
-    
-    # Claude CLI
-    COMPONENTS[claude]="Claude CLI|Anthropic's Claude AI assistant CLI|claude.sh|"
-    
-    # Claude Flow
-    COMPONENTS[claude-flow]="Claude Flow|AI orchestration and workflow tool|claude-flow.sh|claude"
-    
-    # Docker in Docker
-    COMPONENTS[docker-in-docker]="Docker in Docker|Run Docker inside containers|docker-in-docker.sh|"
-    
-    # AWS CLI
-    COMPONENTS[aws-cli]="AWS CLI|Amazon Web Services command-line tools|aws-cli.sh|"
-    
-    # Terraform
-    COMPONENTS[terraform]="Terraform|Infrastructure as Code tool|terraform.sh|"
-    
-    # Node.js tools
-    COMPONENTS[node-tools]="Node.js Tools|npm, yarn, pnpm package managers|node-tools.sh|"
-    
-    # Python tools
-    COMPONENTS[python-tools]="Python Tools|pip, poetry, virtualenv tools|python-tools.sh|"
-    
-    # Kubernetes tools
-    COMPONENTS[k8s-tools]="Kubernetes Tools|kubectl, helm, k9s|k8s-tools.sh|"
-    
-    # Database clients
-    COMPONENTS[db-clients]="Database Clients|PostgreSQL, MySQL, MongoDB clients|db-clients.sh|"
-    
-    # VS Code extensions
-    COMPONENTS[vscode-extensions]="VS Code Extensions|Popular extensions pre-installed|vscode-extensions.sh|"
-    
-    # Git tools
-    COMPONENTS[git-tools]="Git Tools|git-flow, git-lfs, hub|git-tools.sh|github-cli"
+    COMPONENT_DATA=(
+        "github-cli|GitHub CLI|Command-line interface for GitHub|github-cli.sh|"
+        "claude|Claude CLI|Anthropic's Claude AI assistant CLI|claude.sh|"
+        "claude-flow|Claude Flow|AI orchestration and workflow tool|claude-flow.sh|claude"
+        "docker-in-docker|Docker in Docker|Run Docker inside containers|docker-in-docker.sh|"
+        "aws-cli|AWS CLI|Amazon Web Services command-line tools|aws-cli.sh|"
+        "terraform|Terraform|Infrastructure as Code tool|terraform.sh|"
+        "node-tools|Node.js Tools|npm, yarn, pnpm package managers|node-tools.sh|"
+        "python-tools|Python Tools|pip, poetry, virtualenv tools|python-tools.sh|"
+        "k8s-tools|Kubernetes Tools|kubectl, helm, k9s|k8s-tools.sh|"
+        "db-clients|Database Clients|PostgreSQL, MySQL, MongoDB clients|db-clients.sh|"
+        "vscode-extensions|VS Code Extensions|Popular extensions pre-installed|vscode-extensions.sh|"
+        "git-tools|Git Tools|git-flow, git-lfs, hub|git-tools.sh|github-cli"
+    )
 }
 
 # Get component metadata
@@ -58,36 +39,43 @@ get_component_info() {
     local component="$1"
     local field="$2"
     
-    if [ -z "${COMPONENTS[$component]}" ]; then
-        return 1
-    fi
+    # Find the component in the data array
+    for data in "${COMPONENT_DATA[@]}"; do
+        local id=$(echo "$data" | cut -d'|' -f1)
+        if [ "$id" == "$component" ]; then
+            case "$field" in
+                name)
+                    echo "$data" | cut -d'|' -f2
+                    return 0
+                    ;;
+                description)
+                    echo "$data" | cut -d'|' -f3
+                    return 0
+                    ;;
+                installer)
+                    echo "$data" | cut -d'|' -f4
+                    return 0
+                    ;;
+                dependencies)
+                    echo "$data" | cut -d'|' -f5
+                    return 0
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+        fi
+    done
     
-    local info="${COMPONENTS[$component]}"
-    case "$field" in
-        name)
-            echo "$info" | cut -d'|' -f1
-            ;;
-        description)
-            echo "$info" | cut -d'|' -f2
-            ;;
-        installer)
-            echo "$info" | cut -d'|' -f3
-            ;;
-        dependencies)
-            echo "$info" | cut -d'|' -f4
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    return 1
 }
 
 # List all available components
 list_components() {
     register_components
     
-    for component in "${!COMPONENTS[@]}"; do
-        echo "$component"
+    for data in "${COMPONENT_DATA[@]}"; do
+        echo "$data" | cut -d'|' -f1
     done | sort
 }
 
@@ -105,11 +93,14 @@ component_exists() {
     local component="$1"
     register_components
     
-    if [ -n "${COMPONENTS[$component]}" ]; then
-        return 0
-    else
-        return 1
-    fi
+    for data in "${COMPONENT_DATA[@]}"; do
+        local id=$(echo "$data" | cut -d'|' -f1)
+        if [ "$id" == "$component" ]; then
+            return 0
+        fi
+    done
+    
+    return 1
 }
 
 # Get component installer path
