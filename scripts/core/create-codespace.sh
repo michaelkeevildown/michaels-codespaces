@@ -305,36 +305,32 @@ create_codespace() {
         echo_info "Component selection..."
         echo ""
         
-        # Try ASCII selector first (our preferred method)
-        if check_ascii_select; then
-            log_debug "Using ASCII selector for component selection"
-            selected_components=$(ascii_component_selection) || {
-                echo_warning "Component selection cancelled, continuing without components"
-                selected_components=""
-            }
-        # Fall back to whiptail if ASCII selector not available
-        elif check_whiptail; then
-            log_debug "Using whiptail for component selection"
-            # Use whiptail for Ubuntu-style menu
-            selected_components=$(whiptail_component_selection) || {
-                echo_warning "Component selection cancelled, continuing without components"
-                selected_components=""
-            }
+        # Debug: Check if functions are available
+        log_debug "Checking available component selection methods..."
+        log_debug "check_ascii_select available: $(type -t check_ascii_select || echo 'not found')"
+        log_debug "check_whiptail available: $(type -t check_whiptail || echo 'not found')"
+        log_debug "interactive_select available: $(type -t interactive_select || echo 'not found')"
+        log_debug "simple_select available: $(type -t simple_select || echo 'not found')"
+        
+        # Additional debug: test which selector will be used
+        if check_ascii_select 2>/dev/null; then
+            echo_debug "ASCII selector check passed"
         else
-            log_debug "ASCII and whiptail not available, trying interactive selection"
-            # Try interactive selection
-            if selected_components=$(interactive_select); then
-                log_debug "Interactive selection succeeded"
-            else
-                # If interactive fails (no TTY, etc.), use simple selection
-                log_debug "Interactive selection failed, falling back to simple"
-                echo_info "Using simple selection..."
-                selected_components=$(simple_select) || {
-                    echo_warning "Component selection cancelled, continuing without components"
-                    selected_components=""
-                }
-            fi
+            echo_debug "ASCII selector check failed"
         fi
+        
+        if check_whiptail 2>/dev/null; then
+            echo_debug "Whiptail check passed"
+        else
+            echo_debug "Whiptail check failed"
+        fi
+        
+        # Force ASCII selector as the primary method
+        log_debug "Using ASCII selector for component selection"
+        selected_components=$(ascii_component_selection) || {
+            echo_warning "Component selection cancelled, continuing without components"
+            selected_components=""
+        }
     elif [ -n "$PRESET" ]; then
         echo_info "Loading preset: $PRESET"
         selected_components=$(load_preset "$PRESET") || {

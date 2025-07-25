@@ -47,7 +47,11 @@ whiptail_select() {
     local options=()
     local i=1
     
+    # Debug: check what components we get
+    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Building component list for whiptail" >&2
+    
     while IFS= read -r component; do
+        [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Processing component: $component" >&2
         local name=$(get_component_info "$component" "name")
         local desc=$(get_component_info "$component" "description")
         
@@ -55,9 +59,18 @@ whiptail_select() {
             # Add component to options (tag, item, status)
             # All components are selected by default (ON)
             options+=("$component" "$name - $desc" "ON")
+            [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Added option: $component | $name - $desc" >&2
         fi
         ((i++))
     done < <(list_components)
+    
+    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Total options: ${#options[@]}" >&2
+    
+    # Check if we have any options
+    if [ ${#options[@]} -eq 0 ]; then
+        echo "ERROR: No components found for selection" >&2
+        return 1
+    fi
     
     # Calculate dialog dimensions
     local height=$((${#options[@]}/3 + 10))

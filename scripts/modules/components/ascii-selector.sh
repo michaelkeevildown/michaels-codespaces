@@ -19,7 +19,8 @@ fi
 
 # Check if ascii-select is available
 check_ascii_select() {
-    if command -v ascii_select >/dev/null 2>&1; then
+    # Check if the ascii_select function is available
+    if [ "$(type -t ascii_select 2>/dev/null)" = "function" ]; then
         return 0
     else
         return 1
@@ -42,6 +43,9 @@ ascii_component_select() {
         fi
     done < <(list_components)
     
+    # Debug: log what we found
+    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Found ${#components[@]} components" >&2
+    
     # Check if we have components
     if [ ${#components[@]} -eq 0 ]; then
         echo "No components available" >&2
@@ -58,8 +62,18 @@ ascii_component_select() {
         "Select components to install:" \
         "${components[@]}"); then
         
-        # Return selected component IDs
-        echo "$selected"
+        # Extract just the component IDs from the selection
+        # The selected output will be in format: "component_id|description component_id|description"
+        local component_ids=""
+        for item in $selected; do
+            local id=$(echo "$item" | cut -d'|' -f1)
+            if [ -n "$id" ]; then
+                component_ids="$component_ids $id"
+            fi
+        done
+        
+        # Return selected component IDs (trimmed)
+        echo "${component_ids## }"
         return 0
     else
         # User cancelled

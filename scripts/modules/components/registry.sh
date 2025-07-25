@@ -30,6 +30,11 @@ get_component_info() {
     local component="$1"
     local field="$2"
     
+    # Ensure components are registered (needed for subshells)
+    if [ ${#COMPONENT_DATA[@]} -eq 0 ]; then
+        register_components
+    fi
+    
     # Find the component in the data array
     for data in "${COMPONENT_DATA[@]}"; do
         local id=$(echo "$data" | cut -d'|' -f1)
@@ -63,7 +68,11 @@ get_component_info() {
 
 # List all available components
 list_components() {
+    # Always re-register to ensure data is available in subshells
     register_components
+    
+    # Debug output
+    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: COMPONENT_DATA has ${#COMPONENT_DATA[@]} items" >&2
     
     for data in "${COMPONENT_DATA[@]}"; do
         echo "$data" | cut -d'|' -f1
