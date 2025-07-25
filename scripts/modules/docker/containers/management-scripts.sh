@@ -165,12 +165,12 @@ create_vscode_workspace() {
 {
     "folders": [
         {
-            "path": "/home/coder/project"
+            "path": "/home/coder/${safe_name}"
         }
     ],
     "settings": {
         "terminal.integrated.defaultProfile.linux": "bash",
-        "terminal.integrated.cwd": "/home/coder/project",
+        "terminal.integrated.cwd": "/home/coder/${safe_name}",
         "workbench.startupEditor": "none",
         "explorer.openEditors.visible": 0,
         "files.autoSave": "afterDelay",

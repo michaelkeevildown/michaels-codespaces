@@ -93,7 +93,7 @@ services:
       - "{{VS_CODE_PORT}}:8080"
       - "{{APP_PORT}}:3000"
     volumes:
-      - ./src:/home/coder/project
+      - ./src:/home/coder/{{SAFE_REPO_NAME}}
       - ./data:/home/coder/.local/share/code-server
       - ${HOME}/.ssh:/home/coder/.ssh:ro
       - ${HOME}/codespaces/auth/git-config:/home/coder/.gitconfig:ro

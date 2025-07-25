@@ -45,6 +45,9 @@ generate_basic_compose() {
     local labels="${config[labels]:-}"
     local healthcheck="${config[healthcheck]:-true}"
     
+    # Extract codespace name from container name (remove -dev suffix)
+    local codespace_name="${container_name%-dev}"
+    
     # Log configuration values
     log_variables "Docker Compose Config" container_name image password ports env_vars volumes networks labels healthcheck
     
@@ -87,7 +90,7 @@ EOF
     
     # Add volumes
     echo "    volumes:"
-    echo "      - ./src:/home/coder/project"
+    echo "      - ./src:/home/coder/${codespace_name}"
     echo "      - ./data:/home/coder/.local/share/code-server"
     echo "      - ./config:/home/coder/.config"
     echo "      - ./logs:/home/coder/logs"
@@ -124,7 +127,7 @@ EOF
     fi
     
     # Add command - code-server runs with its own entrypoint
-    echo "    command: [\"--bind-addr\", \"0.0.0.0:8080\", \"--auth\", \"password\", \"/home/coder/project\"]"
+    echo "    command: [\"--bind-addr\", \"0.0.0.0:8080\", \"--auth\", \"password\", \"/home/coder/${codespace_name}\"]"
     
     # Add healthcheck if enabled
     if [ "$healthcheck" == "true" ]; then
@@ -152,15 +155,19 @@ EOF
 generate_language_compose() {
     local language="$1"
     
+    # Extract codespace name from container name (remove -dev suffix)
+    local container_name="${config[container_name]}"
+    local codespace_name="${container_name%-dev}"
+    
     case "$language" in
         "node"|"nodejs")
             config[image]="${config[image]:-node:18-bullseye}"
             config[env_vars]="${config[env_vars]}\n      - NODE_ENV=development"
-            config[volumes]="${config[volumes]}\n      - node_modules:/home/coder/project/node_modules"
+            config[volumes]="${config[volumes]}\n      - node_modules:/home/coder/${codespace_name}/node_modules"
             ;;
         "python")
             config[image]="${config[image]:-python:3.11-bullseye}"
-            config[env_vars]="${config[env_vars]}\n      - PYTHONPATH=/home/coder/project"
+            config[env_vars]="${config[env_vars]}\n      - PYTHONPATH=/home/coder/${codespace_name}"
             config[volumes]="${config[volumes]}\n      - pip_cache:/home/coder/.cache/pip"
             ;;
         "go"|"golang")

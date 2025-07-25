@@ -198,6 +198,9 @@ verify_container_persistence() {
     local codespace_dir="$1"
     local compose_file="$codespace_dir/docker-compose.yml"
     
+    # Extract codespace name from directory path
+    local codespace_name=$(basename "$codespace_dir")
+    
     echo_info "Verifying container persistence..."
     
     # Check if volumes exist
@@ -222,26 +225,26 @@ verify_container_persistence() {
     if [ "$container_status" = "running" ]; then
         echo_info "Checking repository accessibility in container..."
         
-        # Check if /home/coder/project exists and has content
-        local file_count=$(docker-compose -f "$compose_file" exec -T dev bash -c "ls -1 /home/coder/project 2>/dev/null | wc -l" 2>/dev/null || echo "0")
+        # Check if /home/coder/${codespace_name} exists and has content
+        local file_count=$(docker-compose -f "$compose_file" exec -T dev bash -c "ls -1 /home/coder/${codespace_name} 2>/dev/null | wc -l" 2>/dev/null || echo "0")
         
         if [ "$file_count" -gt 0 ]; then
             echo_success "Repository is accessible in container ($file_count files/directories)"
             
             # Verify git repository
-            if docker-compose -f "$compose_file" exec -T dev bash -c "cd /home/coder/project && git status" &>/dev/null; then
+            if docker-compose -f "$compose_file" exec -T dev bash -c "cd /home/coder/${codespace_name} && git status" &>/dev/null; then
                 echo_success "Git repository is valid and accessible"
             else
                 echo_warning "Directory exists but git repository status could not be verified"
             fi
         else
-            echo_error "Repository is not accessible in container at /home/coder/project"
+            echo_error "Repository is not accessible in container at /home/coder/${codespace_name}"
             return 1
         fi
     fi
     
     # Check volume mount configuration in docker-compose
-    if grep -q "./src:/home/coder/project" "$compose_file"; then
+    if grep -q "./src:/home/coder/${codespace_name}" "$compose_file"; then
         echo_success "Volume mount configuration is correct"
     else
         echo_error "Volume mount configuration is incorrect in docker-compose.yml"
