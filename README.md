@@ -78,7 +78,7 @@ mcs create git@github.com:torvalds/linux.git
 
 📦 Codespace: torvalds-linux
 🌐 VS Code URL: http://localhost:8080
-🔑 Password: kT9mN3pQ2xR5wY7v
+🔑 Password: FAKEPASSWORDHERE
 ```
 
 Open that URL and boom - you're coding in a fully isolated Linux kernel dev environment!
