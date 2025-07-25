@@ -5,13 +5,26 @@
 
 set -e
 
+# Define echo_debug if not already defined
+if ! type -t echo_debug >/dev/null 2>&1; then
+    echo_debug() {
+        [ "${DEBUG:-0}" -eq 1 ] && echo "🔍 $1" >&2
+    }
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo_debug "ASCII-SELECTOR: SCRIPT_DIR=$SCRIPT_DIR" >&2
+
 source "$SCRIPT_DIR/registry.sh"
 
 # Source the ascii-select utility
 UTILS_DIR="$SCRIPT_DIR/../../utils"
+echo_debug "ASCII-SELECTOR: Looking for ascii-select.sh at: $UTILS_DIR/ascii-select.sh" >&2
+
 if [ -f "$UTILS_DIR/ascii-select.sh" ]; then
+    echo_debug "ASCII-SELECTOR: Found ascii-select.sh, sourcing..." >&2
     source "$UTILS_DIR/ascii-select.sh"
+    echo_debug "ASCII-SELECTOR: After sourcing, ascii_select is: $(type -t ascii_select || echo 'not found')" >&2
 else
     echo "Error: ascii-select.sh not found at $UTILS_DIR/ascii-select.sh" >&2
     # Return false for check function instead of exiting
@@ -22,32 +35,46 @@ fi
 
 # Check if ascii-select is available
 check_ascii_select() {
+    echo_debug "ASCII-SELECTOR: check_ascii_select called" >&2
     # Check if the ascii_select function is available
-    if [ "$(type -t ascii_select 2>/dev/null)" = "function" ]; then
+    local func_type=$(type -t ascii_select 2>/dev/null)
+    echo_debug "ASCII-SELECTOR: type -t ascii_select returned: '$func_type'" >&2
+    
+    if [ "$func_type" = "function" ]; then
+        echo_debug "ASCII-SELECTOR: ascii_select is available as a function" >&2
         return 0
     else
+        echo_debug "ASCII-SELECTOR: ascii_select is NOT available" >&2
         return 1
     fi
 }
 
 # ASCII selection
 ascii_component_select() {
+    echo_debug "ASCII-SELECTOR: ascii_component_select called" >&2
+    
     # Ensure components are registered
+    echo_debug "ASCII-SELECTOR: Calling register_components" >&2
     register_components
     
     # Build component list with descriptions
     local components=()
+    echo_debug "ASCII-SELECTOR: Building component list..." >&2
+    
     while IFS= read -r component; do
+        echo_debug "ASCII-SELECTOR: Processing component: '$component'" >&2
         local name=$(get_component_info "$component" "name")
         local desc=$(get_component_info "$component" "description")
+        echo_debug "ASCII-SELECTOR: Component name='$name', desc='$desc'" >&2
         
         if [ -n "$name" ]; then
             components+=("${component}|${name} - ${desc}")
+            echo_debug "ASCII-SELECTOR: Added to array: '${component}|${name} - ${desc}'" >&2
         fi
     done < <(list_components)
     
     # Debug: log what we found
-    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Found ${#components[@]} components" >&2
+    echo_debug "ASCII-SELECTOR: Found ${#components[@]} components total" >&2
     
     # Check if we have components
     if [ ${#components[@]} -eq 0 ]; then
@@ -64,6 +91,9 @@ ascii_component_select() {
     }
     
     # Show ASCII selection
+    echo_debug "ASCII-SELECTOR: About to call ascii_select with ${#components[@]} components" >&2
+    echo_debug "ASCII-SELECTOR: ascii_select command: ascii_select --with-descriptions --preselect '1,2,3' --style simple --delimiter ' ' 'Select components to install:' '${components[@]}'" >&2
+    
     local selected
     if selected=$(ascii_select \
         --with-descriptions \
@@ -134,11 +164,22 @@ ascii_preset_select() {
 # Main selection function
 ascii_component_selection() {
     # Debug output
-    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Starting ASCII component selection" >&2
+    echo_debug "ASCII-SELECTOR: ascii_component_selection called" >&2
+    echo_debug "ASCII-SELECTOR: DEBUG=$DEBUG" >&2
     
     # Directly show component selection with all pre-selected
     # This simplifies the flow and avoids the hanging preset menu
-    ascii_component_select
+    echo_debug "ASCII-SELECTOR: Calling ascii_component_select" >&2
+    local result
+    if result=$(ascii_component_select); then
+        echo_debug "ASCII-SELECTOR: ascii_component_select succeeded, result='$result'" >&2
+        echo "$result"
+        return 0
+    else
+        local exit_code=$?
+        echo_debug "ASCII-SELECTOR: ascii_component_select failed with exit code $exit_code" >&2
+        return $exit_code
+    fi
 }
 
 # Export functions

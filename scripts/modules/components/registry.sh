@@ -10,6 +10,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALLERS_DIR="$SCRIPT_DIR/installers"
 PRESETS_DIR="$SCRIPT_DIR/presets"
 
+# Define echo_debug if not already defined
+if ! type -t echo_debug >/dev/null 2>&1; then
+    echo_debug() {
+        [ "${DEBUG:-0}" -eq 1 ] && echo "🔍 $1" >&2
+    }
+fi
+
 # Component data stored as delimited strings
 # Format: component_id|name|description|installer|dependencies
 COMPONENT_DATA=()
@@ -68,13 +75,23 @@ get_component_info() {
 
 # List all available components
 list_components() {
+    echo_debug "REGISTRY: list_components called" >&2
+    
     # Always re-register to ensure data is available in subshells
+    echo_debug "REGISTRY: Calling register_components" >&2
     register_components
     
     # Debug output
-    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: COMPONENT_DATA has ${#COMPONENT_DATA[@]} items" >&2
+    echo_debug "REGISTRY: COMPONENT_DATA has ${#COMPONENT_DATA[@]} items" >&2
+    echo_debug "REGISTRY: COMPONENT_DATA contents:" >&2
+    for i in "${!COMPONENT_DATA[@]}"; do
+        echo_debug "REGISTRY:   [$i] = '${COMPONENT_DATA[$i]}'" >&2
+    done
     
+    echo_debug "REGISTRY: Extracting component IDs..." >&2
     for data in "${COMPONENT_DATA[@]}"; do
+        local id=$(echo "$data" | cut -d'|' -f1)
+        echo_debug "REGISTRY: Extracted ID: '$id'" >&2
         echo "$data" | cut -d'|' -f1
     done | sort
 }

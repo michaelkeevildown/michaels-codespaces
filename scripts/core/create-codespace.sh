@@ -305,18 +305,36 @@ create_codespace() {
         echo_info "Component selection..."
         echo ""
         
+        # EXTENSIVE DEBUG LOGGING
+        echo_debug "=== START COMPONENT SELECTION DEBUG ==="
+        echo_debug "Current directory: $(pwd)"
+        echo_debug "SCRIPT_DIR: ${SCRIPT_DIR}"
+        echo_debug "MCS_MODULES_DIR: ${MCS_MODULES_DIR}"
+        
         # Debug: Check if functions are available
-        log_debug "Checking available component selection methods..."
-        log_debug "check_ascii_select available: $(type -t check_ascii_select || echo 'not found')"
-        log_debug "check_whiptail available: $(type -t check_whiptail || echo 'not found')"
-        log_debug "interactive_select available: $(type -t interactive_select || echo 'not found')"
-        log_debug "simple_select available: $(type -t simple_select || echo 'not found')"
+        echo_debug "Checking available component selection methods..."
+        echo_debug "check_ascii_select available: $(type -t check_ascii_select || echo 'not found')"
+        echo_debug "ascii_component_selection available: $(type -t ascii_component_selection || echo 'not found')"
+        echo_debug "ascii_component_select available: $(type -t ascii_component_select || echo 'not found')"
+        echo_debug "ascii_select available: $(type -t ascii_select || echo 'not found')"
+        echo_debug "check_whiptail available: $(type -t check_whiptail || echo 'not found')"
+        echo_debug "interactive_select available: $(type -t interactive_select || echo 'not found')"
+        echo_debug "simple_select available: $(type -t simple_select || echo 'not found')"
+        echo_debug "list_components available: $(type -t list_components || echo 'not found')"
+        echo_debug "register_components available: $(type -t register_components || echo 'not found')"
+        
+        # Test component registry
+        echo_debug "Testing component registry..."
+        echo_debug "Calling list_components..."
+        local test_components=$(list_components 2>&1)
+        echo_debug "list_components output: '$test_components'"
         
         # Additional debug: test which selector will be used
+        echo_debug "Testing selector availability..."
         if check_ascii_select 2>/dev/null; then
             echo_debug "ASCII selector check passed"
         else
-            echo_debug "ASCII selector check failed"
+            echo_debug "ASCII selector check failed: $(check_ascii_select 2>&1 || echo $?)"
         fi
         
         if check_whiptail 2>/dev/null; then
@@ -326,21 +344,36 @@ create_codespace() {
         fi
         
         # Try ASCII selector first
-        log_debug "Attempting ASCII selector for component selection"
+        echo_debug "Attempting ASCII selector for component selection"
+        echo_debug "Calling ascii_component_selection..."
         
         # Try ASCII selection with error handling
-        if ! selected_components=$(ascii_component_selection 2>&1); then
-            log_debug "ASCII selector failed or was cancelled, trying simple selection"
+        local selection_output
+        local selection_error
+        if selection_output=$(ascii_component_selection 2>&1); then
+            echo_debug "ASCII selection returned successfully"
+            echo_debug "Selection output: '$selection_output'"
+            selected_components="$selection_output"
+            echo_debug "ASCII selection successful: $selected_components"
+        else
+            local exit_code=$?
+            echo_debug "ASCII selector failed with exit code: $exit_code"
+            echo_debug "Selection output/error: '$selection_output'"
             echo_info "Falling back to simple selection..."
             
             # Fall back to simple selection
-            selected_components=$(simple_select) || {
+            echo_debug "Calling simple_select..."
+            if selected_components=$(simple_select 2>&1); then
+                echo_debug "Simple select successful: '$selected_components'"
+            else
+                echo_debug "Simple select failed: $?"
                 echo_warning "Component selection cancelled, continuing without components"
                 selected_components=""
-            }
-        else
-            log_debug "ASCII selection successful: $selected_components"
+            fi
         fi
+        
+        echo_debug "Final selected_components: '$selected_components'"
+        echo_debug "=== END COMPONENT SELECTION DEBUG ==="
     elif [ -n "$PRESET" ]; then
         echo_info "Loading preset: $PRESET"
         selected_components=$(load_preset "$PRESET") || {
