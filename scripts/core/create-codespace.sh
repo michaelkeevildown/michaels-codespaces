@@ -6,7 +6,22 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODULES_DIR="$SCRIPT_DIR/../modules"
+
+# Source path configuration first
+if [ -f "$SCRIPT_DIR/../utils/paths.sh" ]; then
+    source "$SCRIPT_DIR/../utils/paths.sh"
+else
+    echo "ERROR: Path configuration not found" >&2
+    exit 1
+fi
+
+# Verify paths are set up correctly
+if ! verify_paths; then
+    echo "ERROR: Path verification failed. Please run install-mcs.sh" >&2
+    exit 1
+fi
+
+MODULES_DIR="$MCS_MODULES_DIR"
 
 # Source all required modules
 source "$MODULES_DIR/github/auth/github-auth.sh"
@@ -22,11 +37,8 @@ source "$MODULES_DIR/components/registry.sh"
 source "$MODULES_DIR/components/interactive-selector.sh"
 source "$MODULES_DIR/components/manifest-generator.sh"
 
-# Source utilities - use CODESPACE_HOME if available, otherwise relative path
-UTILS_DIR="${CODESPACE_HOME:-$(cd "$SCRIPT_DIR/../.." && pwd)}/scripts/utils"
-if [ -f "$UTILS_DIR/colors.sh" ]; then
-    source "$UTILS_DIR/colors.sh"
-else
+# Source utilities using path module
+if ! source_utility "colors"; then
     echo_info() { echo "ℹ️  $1"; }
     echo_success() { echo "✅ $1"; }
     echo_warning() { echo "⚠️  $1"; }
@@ -36,9 +48,8 @@ else
 fi
 
 # Source logging utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/../utils/logging.sh" ]; then
-    source "$SCRIPT_DIR/../utils/logging.sh"
+if [ -f "$MCS_UTILS_DIR/logging.sh" ]; then
+    source "$MCS_UTILS_DIR/logging.sh"
     # Initialize logging
     init_logging
 else
