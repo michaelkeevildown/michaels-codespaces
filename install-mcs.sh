@@ -55,25 +55,49 @@ if [ ! -d "$CODESPACES_DIR" ]; then
     success "Created $CODESPACES_DIR"
 fi
 
-# Handle installation directory
-if [ -d "$INSTALL_DIR" ]; then
-    warning "Installation directory already exists: $INSTALL_DIR"
-    read -p "Do you want to replace it? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        info "Backing up existing installation..."
-        mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
-        success "Backed up existing installation"
-    else
-        error "Installation cancelled"
-        exit 1
-    fi
+# Detect installation mode
+INSTALL_MODE="production"
+if [ "$SCRIPT_DIR" = "$INSTALL_DIR" ]; then
+    info "Running from installation directory (development mode)"
+    INSTALL_MODE="development"
+elif [[ "$SCRIPT_DIR" == /tmp/mcs-install.* ]]; then
+    info "Running from temporary directory (production install)"
+    INSTALL_MODE="production"
 fi
 
-# Copy all files to installation directory
-info "Installing MCS to $INSTALL_DIR..."
-cp -r "$SCRIPT_DIR" "$INSTALL_DIR"
-success "Installed MCS to $INSTALL_DIR"
+# Handle installation based on mode
+if [ "$INSTALL_MODE" = "production" ]; then
+    # Handle existing installation directory
+    if [ -d "$INSTALL_DIR" ]; then
+        warning "Installation directory already exists: $INSTALL_DIR"
+        read -p "Do you want to replace it? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            info "Backing up existing installation..."
+            mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+            success "Backed up existing installation"
+        else
+            error "Installation cancelled"
+            exit 1
+        fi
+    fi
+    
+    # Copy all files to installation directory
+    info "Installing MCS to $INSTALL_DIR..."
+    cp -r "$SCRIPT_DIR" "$INSTALL_DIR"
+    success "Installed MCS to $INSTALL_DIR"
+    
+    # Initialize git repository in .mcs for updates
+    info "Setting up git repository for updates..."
+    cd "$INSTALL_DIR"
+    git init
+    git remote add origin https://github.com/michaelkeevildown/ubuntu-codespace.git
+    git fetch origin main
+    git reset --hard origin/main
+    success "Git repository configured"
+else
+    info "Development mode - skipping copy (already in $INSTALL_DIR)"
+fi
 
 # Ensure bin directory is in PATH
 info "Setting up PATH..."
@@ -120,16 +144,7 @@ mkdir -p "$CODESPACES_DIR/shared"
 mkdir -p "$CODESPACES_DIR/backups"
 success "Created required directories"
 
-# Initialize git repository in .mcs for updates
-if [ ! -d "$INSTALL_DIR/.git" ]; then
-    info "Initializing git repository for updates..."
-    cd "$INSTALL_DIR"
-    git init
-    git remote add origin git@github.com:michaelkeevildown/ubuntu-codespace.git
-    git fetch origin main
-    git reset --hard origin/main
-    success "Git repository initialized"
-fi
+# Git setup is now handled in the production install section above
 
 # Verify installation
 info "Verifying installation..."

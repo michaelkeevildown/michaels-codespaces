@@ -111,22 +111,27 @@ main() {
         rm -rf "$CODESPACE_HOME"
     fi
     
-    # Clone repository (no depth limit for auto-updates)
-    info "Installing Michael's Codespaces to $CODESPACE_HOME..."
+    # Create temporary directory for installation
+    TEMP_DIR=$(mktemp -d "/tmp/mcs-install.XXXXXX") || abort "Failed to create temporary directory"
+    trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM
+    
+    # Clone repository to temporary directory
+    info "Downloading Michael's Codespaces..."
     if [[ "$CODESPACE_BRANCH" != "main" ]]; then
         info "Using branch: $CODESPACE_BRANCH"
-        git clone --branch "$CODESPACE_BRANCH" "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
+        git clone --branch "$CODESPACE_BRANCH" "$CODESPACE_REPO" "$TEMP_DIR/mcs-source" || abort "Failed to clone repository"
     else
-        git clone "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
+        git clone "$CODESPACE_REPO" "$TEMP_DIR/mcs-source" || abort "Failed to clone repository"
     fi
     
-    # Run setup from the cloned repository
-    info "Running setup scripts..."
-    cd "$CODESPACE_HOME"
+    # Run setup from the temporary directory
+    info "Running installation..."
+    cd "$TEMP_DIR/mcs-source"
     
     # Make scripts executable
     find scripts -name "*.sh" -exec chmod +x {} \;
     chmod +x bin/mcs
+    chmod +x install-mcs.sh
     
     # Run the installation script
     if [ -f ./install-mcs.sh ]; then
