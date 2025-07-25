@@ -34,6 +34,7 @@ source "$MODULES_DIR/docker/containers/management-scripts.sh"
 source "$MODULES_DIR/networking/port-manager.sh"
 source "$MODULES_DIR/storage/env-manager.sh"
 source "$MODULES_DIR/components/registry.sh"
+source "$MODULES_DIR/components/ascii-selector.sh"
 source "$MODULES_DIR/components/whiptail-selector.sh"
 source "$MODULES_DIR/components/interactive-selector.sh"
 source "$MODULES_DIR/components/simple-selector.sh"
@@ -304,8 +305,15 @@ create_codespace() {
         echo_info "Component selection..."
         echo ""
         
-        # Try whiptail first (most reliable), then interactive, then simple
-        if check_whiptail; then
+        # Try ASCII selector first (our preferred method)
+        if check_ascii_select; then
+            log_debug "Using ASCII selector for component selection"
+            selected_components=$(ascii_component_selection) || {
+                echo_warning "Component selection cancelled, continuing without components"
+                selected_components=""
+            }
+        # Fall back to whiptail if ASCII selector not available
+        elif check_whiptail; then
             log_debug "Using whiptail for component selection"
             # Use whiptail for Ubuntu-style menu
             selected_components=$(whiptail_component_selection) || {
@@ -313,7 +321,7 @@ create_codespace() {
                 selected_components=""
             }
         else
-            log_debug "Whiptail not available, trying interactive selection"
+            log_debug "ASCII and whiptail not available, trying interactive selection"
             # Try interactive selection
             if selected_components=$(interactive_select); then
                 log_debug "Interactive selection succeeded"
