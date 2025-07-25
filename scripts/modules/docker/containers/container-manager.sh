@@ -193,6 +193,65 @@ get_container_stats() {
     docker stats --no-stream "$container_name"
 }
 
+# Verify volume persistence and repository availability
+verify_container_persistence() {
+    local codespace_dir="$1"
+    local compose_file="$codespace_dir/docker-compose.yml"
+    
+    echo_info "Verifying container persistence..."
+    
+    # Check if volumes exist
+    if [ ! -d "$codespace_dir/src" ]; then
+        echo_error "Source directory not found: $codespace_dir/src"
+        return 1
+    fi
+    
+    if [ ! -d "$codespace_dir/data" ]; then
+        echo_warning "Data directory not found, creating: $codespace_dir/data"
+        mkdir -p "$codespace_dir/data"
+    fi
+    
+    # Check if repository code exists
+    if [ -z "$(ls -A "$codespace_dir/src" 2>/dev/null)" ]; then
+        echo_error "Source directory is empty - repository may not have been cloned"
+        return 1
+    fi
+    
+    # If container is running, verify code is accessible inside
+    local container_status=$(get_container_status "$codespace_dir")
+    if [ "$container_status" = "running" ]; then
+        echo_info "Checking repository accessibility in container..."
+        
+        # Check if /home/coder/project exists and has content
+        local file_count=$(docker-compose -f "$compose_file" exec -T dev bash -c "ls -1 /home/coder/project 2>/dev/null | wc -l" 2>/dev/null || echo "0")
+        
+        if [ "$file_count" -gt 0 ]; then
+            echo_success "Repository is accessible in container ($file_count files/directories)"
+            
+            # Verify git repository
+            if docker-compose -f "$compose_file" exec -T dev bash -c "cd /home/coder/project && git status" &>/dev/null; then
+                echo_success "Git repository is valid and accessible"
+            else
+                echo_warning "Directory exists but git repository status could not be verified"
+            fi
+        else
+            echo_error "Repository is not accessible in container at /home/coder/project"
+            return 1
+        fi
+    fi
+    
+    # Check volume mount configuration in docker-compose
+    if grep -q "./src:/home/coder/project" "$compose_file"; then
+        echo_success "Volume mount configuration is correct"
+    else
+        echo_error "Volume mount configuration is incorrect in docker-compose.yml"
+        return 1
+    fi
+    
+    echo_success "Container persistence verified"
+    return 0
+}
+
 # Clean up stopped containers and unused resources
 cleanup_containers() {
     echo_info "Cleaning up Docker resources..."
@@ -225,4 +284,5 @@ export -f exec_in_container
 export -f view_container_logs
 export -f wait_for_container_ready
 export -f get_container_stats
+export -f verify_container_persistence
 export -f cleanup_containers

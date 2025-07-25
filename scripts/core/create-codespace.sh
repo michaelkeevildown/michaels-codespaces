@@ -379,6 +379,12 @@ create_codespace() {
             echo_error "Failed to start codespace"
             exit 1
         fi
+        
+        # Verify persistence and repository accessibility
+        if ! verify_container_persistence "$CODESPACE_DIR"; then
+            echo_warning "Repository may not be properly accessible in VS Code"
+            echo_info "Try restarting the container with: mcs restart $SAFE_NAME"
+        fi
     fi
     
     # Display success message

@@ -124,7 +124,7 @@ EOF
     fi
     
     # Add command - code-server runs with its own entrypoint
-    echo "    command: [\"--bind-addr\", \"0.0.0.0:8080\", \"--auth\", \"password\"]"
+    echo "    command: [\"--bind-addr\", \"0.0.0.0:8080\", \"--auth\", \"password\", \"/home/coder/project\"]"
     
     # Add healthcheck if enabled
     if [ "$healthcheck" == "true" ]; then

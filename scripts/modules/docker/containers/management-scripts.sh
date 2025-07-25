@@ -145,6 +145,80 @@ unregister_aliases_from_shell() {
     fi
 }
 
+# Create VS Code workspace configuration
+create_vscode_workspace() {
+    local codespace_dir="$1"
+    local safe_name="$2"
+    local language="$3"
+    
+    local workspace_file="$codespace_dir/${safe_name}.code-workspace"
+    
+    # Create workspace configuration
+    cat > "$workspace_file" << EOF
+{
+    "folders": [
+        {
+            "path": "/home/coder/project"
+        }
+    ],
+    "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.cwd": "/home/coder/project",
+        "workbench.startupEditor": "none",
+        "explorer.openEditors.visible": 0,
+        "files.autoSave": "afterDelay",
+        "files.autoSaveDelay": 1000
+    },
+    "extensions": {
+        "recommendations": [
+EOF
+    
+    # Add language-specific recommendations
+    case "$language" in
+        "javascript"|"typescript"|"node"|"nodejs")
+            cat >> "$workspace_file" << EOF
+            "dbaeumer.vscode-eslint",
+            "esbenp.prettier-vscode",
+            "formulahendry.auto-rename-tag",
+            "christian-kohler.npm-intellisense"
+EOF
+            ;;
+        "python")
+            cat >> "$workspace_file" << EOF
+            "ms-python.python",
+            "ms-python.vscode-pylance",
+            "ms-python.black-formatter",
+            "charliermarsh.ruff"
+EOF
+            ;;
+        "go"|"golang")
+            cat >> "$workspace_file" << EOF
+            "golang.go"
+EOF
+            ;;
+        "rust")
+            cat >> "$workspace_file" << EOF
+            "rust-lang.rust-analyzer",
+            "tamasfe.even-better-toml"
+EOF
+            ;;
+        "java")
+            cat >> "$workspace_file" << EOF
+            "vscjava.vscode-java-pack",
+            "vscjava.vscode-maven"
+EOF
+            ;;
+    esac
+    
+    cat >> "$workspace_file" << EOF
+        ]
+    }
+}
+EOF
+    
+    echo_debug "Created VS Code workspace file: $workspace_file"
+}
+
 # Create management scripts wrapper
 create_management_scripts() {
     local codespace_dir="$1"
@@ -166,6 +240,9 @@ create_management_scripts() {
     
     # Register aliases in shell
     register_aliases_in_shell "$codespace_dir" "$safe_name"
+    
+    # Create VS Code workspace configuration
+    create_vscode_workspace "$codespace_dir" "$safe_name" "$language"
     
     echo_success "Management scripts created"
 }
@@ -205,5 +282,6 @@ export -f create_codespace_readme
 export -f create_shell_aliases
 export -f register_aliases_in_shell
 export -f unregister_aliases_from_shell
+export -f create_vscode_workspace
 export -f create_management_scripts
 export -f display_codespace_success
