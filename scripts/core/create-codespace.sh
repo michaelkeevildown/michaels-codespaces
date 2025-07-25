@@ -34,6 +34,7 @@ source "$MODULES_DIR/docker/containers/management-scripts.sh"
 source "$MODULES_DIR/networking/port-manager.sh"
 source "$MODULES_DIR/storage/env-manager.sh"
 source "$MODULES_DIR/components/registry.sh"
+source "$MODULES_DIR/components/whiptail-selector.sh"
 source "$MODULES_DIR/components/interactive-selector.sh"
 source "$MODULES_DIR/components/simple-selector.sh"
 source "$MODULES_DIR/components/manifest-generator.sh"
@@ -303,15 +304,29 @@ create_codespace() {
         echo_info "Component selection..."
         echo ""
         
-        # Try interactive selection first, fall back to simple if it fails
-        selected_components=$(interactive_select 2>/dev/null) || {
-            # If interactive fails (no TTY, etc.), use simple selection
-            echo_info "Falling back to simple selection..."
-            selected_components=$(simple_select) || {
+        # Try whiptail first (most reliable), then interactive, then simple
+        if check_whiptail; then
+            log_debug "Using whiptail for component selection"
+            # Use whiptail for Ubuntu-style menu
+            selected_components=$(whiptail_component_selection) || {
                 echo_warning "Component selection cancelled, continuing without components"
                 selected_components=""
             }
-        }
+        else
+            log_debug "Whiptail not available, trying interactive selection"
+            # Try interactive selection
+            if selected_components=$(interactive_select); then
+                log_debug "Interactive selection succeeded"
+            else
+                # If interactive fails (no TTY, etc.), use simple selection
+                log_debug "Interactive selection failed, falling back to simple"
+                echo_info "Using simple selection..."
+                selected_components=$(simple_select) || {
+                    echo_warning "Component selection cancelled, continuing without components"
+                    selected_components=""
+                }
+            fi
+        fi
     elif [ -n "$PRESET" ]; then
         echo_info "Loading preset: $PRESET"
         selected_components=$(load_preset "$PRESET") || {

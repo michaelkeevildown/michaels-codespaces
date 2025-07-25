@@ -227,9 +227,15 @@ get_selected_components() {
 # Main interactive selection
 interactive_select() {
     # Check if terminal supports interactive mode
-    if [ ! -t 0 ] || [ ! -t 1 ]; then
-        echo "Terminal does not support interactive mode" >&2
-        echo "Use --components or --preset flags instead" >&2
+    # Only check stdin (0) for TTY - stdout might be redirected
+    if [ ! -t 0 ]; then
+        echo "Terminal does not support interactive mode (no TTY on stdin)" >&2
+        return 1
+    fi
+    
+    # Additional check for terminal capabilities
+    if [ -z "$TERM" ] || [ "$TERM" = "dumb" ]; then
+        echo "Terminal type '$TERM' does not support interactive mode" >&2
         return 1
     fi
     
