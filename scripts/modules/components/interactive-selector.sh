@@ -48,6 +48,9 @@ init_menu() {
     MENU_SELECTED=()
     MENU_POSITION=0
     
+    # Ensure components are registered
+    register_components
+    
     # Get all components
     while IFS= read -r component; do
         MENU_ITEMS+=("$component")

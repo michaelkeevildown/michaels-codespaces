@@ -117,7 +117,7 @@ parse_arguments() {
     CLONE_DEPTH=""
     COMPONENTS=""
     PRESET=""
-    INTERACTIVE=false
+    INTERACTIVE=""
     
     # Check for help
     if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
@@ -303,17 +303,11 @@ create_codespace() {
         echo_info "Component selection..."
         echo ""
         
-        # Try interactive selection first, fall back to simple if it fails
-        if selected_components=$(interactive_select 2>/dev/null); then
-            echo ""
-        else
-            # Fall back to simple selection
-            echo_debug "Interactive selection failed, using simple selection"
-            selected_components=$(simple_select) || {
-                echo_warning "Component selection cancelled, continuing without components"
-                selected_components=""
-            }
-        fi
+        # Always use simple selection for now - interactive has terminal issues
+        selected_components=$(simple_select) || {
+            echo_warning "Component selection cancelled, continuing without components"
+            selected_components=""
+        }
     elif [ -n "$PRESET" ]; then
         echo_info "Loading preset: $PRESET"
         selected_components=$(load_preset "$PRESET") || {

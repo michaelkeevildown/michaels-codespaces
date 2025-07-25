@@ -10,19 +10,41 @@ source "$SCRIPT_DIR/registry.sh"
 
 # Simple text-based selection
 simple_select() {
+    # Debug output
+    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Entering simple_select" >&2
+    
+    # Ensure components are registered
+    register_components
+    
+    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Components registered" >&2
+    
     echo "Available components:"
     echo ""
     
     # Get all components
     local components=()
     local i=1
+    local component_count=0
+    
     while IFS= read -r component; do
         components+=("$component")
         local name=$(get_component_info "$component" "name")
         local desc=$(get_component_info "$component" "description")
-        printf "  %2d) %-20s - %s\n" "$i" "$name" "$desc"
+        
+        if [ -n "$name" ]; then
+            printf "  %2d) %-20s - %s\n" "$i" "$name" "$desc"
+            ((component_count++))
+        fi
         ((i++))
     done < <(list_components)
+    
+    # Check if we found any components
+    if [ $component_count -eq 0 ]; then
+        echo "  (No components found - check installation)"
+        echo ""
+        echo "Returning to normal codespace creation..."
+        return 1
+    fi
     
     echo ""
     echo "Presets:"
