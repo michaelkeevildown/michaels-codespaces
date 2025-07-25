@@ -246,38 +246,65 @@ cmd_info() {
         exit 1
     fi
     
-    printf "${tty_bold}Codespace: $1${tty_reset}\n"
-    echo "─────────────────────────────"
+    # Read values from .env file
+    local repo_url=$(grep "^REPO_URL=" "$codespace_dir/.env" | cut -d'=' -f2)
+    local vs_code_port=$(grep "^VS_CODE_PORT=" "$codespace_dir/.env" | cut -d'=' -f2)
+    local app_port=$(grep "^APP_PORT=" "$codespace_dir/.env" | cut -d'=' -f2)
+    local password=$(grep "^PASSWORD=" "$codespace_dir/.env" | cut -d'=' -f2)
+    local created=$(grep "^CREATED=" "$codespace_dir/.env" | cut -d'=' -f2)
     
-    # Read .env file
-    while IFS='=' read -r key value; do
-        case "$key" in
-            REPO_URL) printf "Repository: %s\n" "$value" ;;
-            VS_CODE_PORT) printf "VS Code Port: %s\n" "$value" ;;
-            APP_PORT) printf "App Port: %s\n" "$value" ;;
-            PASSWORD) printf "Password: %s\n" "$value" ;;
-            CREATED) printf "Created: %s\n" "$value" ;;
-        esac
-    done < "$codespace_dir/.env"
+    # Get access IP
+    local access_ip="localhost"
+    if [ -f "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" ]; then
+        source "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh" 2>/dev/null || true
+        source "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" 2>/dev/null || true
+        access_ip=$(get_access_ip 2>/dev/null || echo "localhost")
+    fi
+    
+    local vs_code_url="http://$access_ip:$vs_code_port"
+    
+    echo ""
+    echo "${tty_bold}Codespace Information${tty_reset}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "${tty_bold}Name:${tty_reset} $1"
+    echo "${tty_bold}Repository:${tty_reset} $repo_url"
+    echo "${tty_bold}Created:${tty_reset} $created"
+    echo ""
+    echo "${tty_bold}Access Details:${tty_reset}"
+    echo "  ${tty_bold}VS Code URL:${tty_reset} ${tty_green}$vs_code_url${tty_reset}"
+    echo "  ${tty_bold}Password:${tty_reset} ${tty_green}$password${tty_reset}"
+    
+    if [ -n "$app_port" ] && [ "$app_port" != "" ]; then
+        echo "  ${tty_bold}App Port:${tty_reset} $app_port"
+    fi
+    
+    echo ""
     
     # Check if running
     local container_name="${1}-dev"
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
-        printf "Status: ${tty_green}running${tty_reset}\n"
+        echo "${tty_bold}Status:${tty_reset} ${tty_green}● Running${tty_reset}"
         
         # Get container stats
-        local stats=$(docker stats --no-stream --format "table {{.MemUsage}}\t{{.CPUPerc}}" "$container_name" | tail -n 1)
-        printf "Resources: %s\n" "$stats"
+        local stats=$(docker stats --no-stream --format "{{.MemUsage}}\t{{.CPUPerc}}" "$container_name" 2>/dev/null | tail -n 1)
+        if [ -n "$stats" ]; then
+            echo "${tty_bold}Resources:${tty_reset} $stats"
+        fi
     else
-        printf "Status: ${tty_yellow}stopped${tty_reset}\n"
+        echo "${tty_bold}Status:${tty_reset} ${tty_yellow}○ Stopped${tty_reset}"
     fi
     
     # Directory info
-    printf "Location: %s\n" "$codespace_dir"
+    echo "${tty_bold}Location:${tty_reset} $codespace_dir"
     if [ -d "$codespace_dir/src" ]; then
         local size=$(du -sh "$codespace_dir/src" 2>/dev/null | cut -f1)
-        printf "Source size: %s\n" "$size"
+        echo "${tty_bold}Source size:${tty_reset} $size"
     fi
+    
+    echo ""
+    echo "${tty_dim}Tip: Use 'mcs recover $1' for quick credential recovery${tty_reset}"
+    echo ""
 }
 
 cmd_status() {
@@ -289,6 +316,95 @@ cmd_update() {
     cd "$HOME/.michaels-codespaces"
     git pull origin main
     success "Updated to latest version"
+}
+
+cmd_recover() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs recover <codespace-name>"
+        exit 1
+    fi
+    
+    local codespace_dir="$CODESPACES_DIR/$1"
+    if [ ! -f "$codespace_dir/.env" ]; then
+        error "Codespace '$1' not found"
+        exit 1
+    fi
+    
+    # Read credentials from .env file
+    local password=$(grep "^PASSWORD=" "$codespace_dir/.env" | cut -d'=' -f2)
+    local vs_code_port=$(grep "^VS_CODE_PORT=" "$codespace_dir/.env" | cut -d'=' -f2)
+    local repo_url=$(grep "^REPO_URL=" "$codespace_dir/.env" | cut -d'=' -f2)
+    
+    # Get access IP (try to source network-utils or use localhost)
+    local access_ip="localhost"
+    if [ -f "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" ]; then
+        source "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh" 2>/dev/null || true
+        source "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" 2>/dev/null || true
+        access_ip=$(get_access_ip 2>/dev/null || echo "localhost")
+    fi
+    
+    local vs_code_url="http://$access_ip:$vs_code_port"
+    
+    # Display credentials
+    echo ""
+    echo "${tty_bold}Codespace Credentials Recovery${tty_reset}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "${tty_bold}Codespace:${tty_reset} $1"
+    echo "${tty_bold}Repository:${tty_reset} $repo_url"
+    echo ""
+    echo "${tty_bold}VS Code Access:${tty_reset}"
+    echo "  URL: ${tty_green}$vs_code_url${tty_reset}"
+    echo "  Password: ${tty_green}$password${tty_reset}"
+    echo ""
+    echo "${tty_bold}Quick Connect:${tty_reset}"
+    echo "  1. Open: $vs_code_url"
+    echo "  2. Enter password: $password"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
+cmd_reset_password() {
+    if [ -z "$1" ]; then
+        error "Usage: mcs reset-password <codespace-name>"
+        exit 1
+    fi
+    
+    local codespace_dir="$CODESPACES_DIR/$1"
+    if [ ! -f "$codespace_dir/.env" ]; then
+        error "Codespace '$1' not found"
+        exit 1
+    fi
+    
+    # Generate new password
+    local new_password=$(openssl rand -base64 12 2>/dev/null || cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
+    
+    # Update .env file
+    info "Updating password in .env file..."
+    sed -i.bak "s/^PASSWORD=.*/PASSWORD=$new_password/" "$codespace_dir/.env"
+    sed -i.bak "s/^CODE_SERVER_PASSWORD=.*/CODE_SERVER_PASSWORD=$new_password/" "$codespace_dir/.env"
+    rm -f "$codespace_dir/.env.bak"
+    
+    # Update README.md if it exists
+    if [ -f "$codespace_dir/README.md" ]; then
+        info "Updating password in README.md..."
+        sed -i.bak "s/Password: .*/Password: $new_password/" "$codespace_dir/README.md"
+        rm -f "$codespace_dir/README.md.bak"
+    fi
+    
+    # Check if container is running
+    local container_name="${1}-dev"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
+        info "Restarting container with new password..."
+        docker-compose -f "$codespace_dir/docker-compose.yml" restart
+        sleep 3
+    fi
+    
+    success "Password reset successfully!"
+    
+    # Show new credentials
+    cmd_recover "$1"
 }
 
 cmd_cleanup() {
@@ -664,6 +780,8 @@ ${tty_bold}Commands:${tty_reset}
   ${tty_cyan}logs${tty_reset} <name>           View logs for a codespace
   ${tty_cyan}exec${tty_reset} <name> [cmd]     Execute a command in a codespace (or enter shell)
   ${tty_cyan}info${tty_reset} <name>           Show detailed information about a codespace
+  ${tty_cyan}recover${tty_reset} <name>        Recover VS Code URL and password for a codespace
+  ${tty_cyan}reset-password${tty_reset} <name>  Reset the password for a codespace
   ${tty_cyan}status${tty_reset}                Show system and codespaces status
   ${tty_cyan}update${tty_reset}                Update Michael's Codespaces to latest version
   ${tty_cyan}update-ip${tty_reset}             Configure IP address for accessing codespaces
@@ -737,6 +855,14 @@ case "${1:-help}" in
     update-ip|ip)
         shift
         cmd_update_ip "$@"
+        ;;
+    recover)
+        shift
+        cmd_recover "$@"
+        ;;
+    reset-password)
+        shift
+        cmd_reset_password "$@"
         ;;
     cleanup|clean)
         cmd_cleanup

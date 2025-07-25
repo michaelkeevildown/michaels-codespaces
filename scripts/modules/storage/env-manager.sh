@@ -93,6 +93,30 @@ EOF
     # Set proper permissions
     chmod 600 "$codespace_dir/.env"
     
+    # Create .credentials file for easy recovery
+    cat > "$codespace_dir/.credentials" << EOF
+Michael's Codespaces Credentials
+================================
+
+Codespace: $safe_name
+Repository: $repo_url
+Created: $(date +%Y-%m-%d)
+
+VS Code Access:
+--------------
+Port: $vs_code_port
+Password: $password
+
+To recover these credentials later, run:
+  mcs recover $safe_name
+
+To reset the password, run:
+  mcs reset-password $safe_name
+EOF
+    
+    # Set proper permissions for credentials file
+    chmod 600 "$codespace_dir/.credentials"
+    
     echo_success "Environment file created"
 }
 
