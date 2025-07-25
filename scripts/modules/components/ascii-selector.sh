@@ -49,83 +49,75 @@ check_ascii_select() {
     fi
 }
 
-# ASCII selection
-ascii_component_select() {
-    echo_debug "ASCII-SELECTOR: ascii_component_select called" >&2
+# Simple ASCII selection without complex terminal manipulation
+simple_ascii_select() {
+    echo_debug "ASCII-SELECTOR: simple_ascii_select called" >&2
     
     # Ensure components are registered
     echo_debug "ASCII-SELECTOR: Calling register_components" >&2
     register_components
     
-    # Build component list with descriptions
-    local components=()
-    echo_debug "ASCII-SELECTOR: Building component list..." >&2
+    # Build component list
+    local component_ids=()
+    local component_names=()
+    local component_descs=()
     
     while IFS= read -r component; do
-        echo_debug "ASCII-SELECTOR: Processing component: '$component'" >&2
         local name=$(get_component_info "$component" "name")
         local desc=$(get_component_info "$component" "description")
-        echo_debug "ASCII-SELECTOR: Component name='$name', desc='$desc'" >&2
         
         if [ -n "$name" ]; then
-            components+=("${component}|${name} - ${desc}")
-            echo_debug "ASCII-SELECTOR: Added to array: '${component}|${name} - ${desc}'" >&2
+            component_ids+=("$component")
+            component_names+=("$name")
+            component_descs+=("$desc")
         fi
     done < <(list_components)
     
-    # Debug: log what we found
-    echo_debug "ASCII-SELECTOR: Found ${#components[@]} components total" >&2
+    echo_debug "ASCII-SELECTOR: Found ${#component_ids[@]} components" >&2
     
-    # Check if we have components
-    if [ ${#components[@]} -eq 0 ]; then
+    if [ ${#component_ids[@]} -eq 0 ]; then
         echo "No components available" >&2
         return 1
     fi
     
-    # Debug: Show what we're about to display
-    [ "${DEBUG:-0}" -eq 1 ] && {
-        echo "DEBUG: About to show ASCII selection with components:" >&2
-        for comp in "${components[@]}"; do
-            echo "DEBUG:   $comp" >&2
-        done
-    }
-    
-    # Show ASCII selection
-    echo_debug "ASCII-SELECTOR: About to call ascii_select with ${#components[@]} components" >&2
-    echo_debug "ASCII-SELECTOR: ascii_select command: ascii_select --with-descriptions --preselect '1,2,3' --style simple --delimiter ' ' 'Select components to install:' '${components[@]}'" >&2
-    
-    local selected
-    if selected=$(ascii_select \
-        --with-descriptions \
-        --preselect "1,2,3" \
-        --style simple \
-        --delimiter " " \
-        "Select components to install:" \
-        "${components[@]}" 2>&1); then
+    # Display components with ASCII checkboxes (all pre-selected)
+    # Output to terminal (using /dev/tty to bypass command substitution)
+    {
+        echo "Select components to install:"
+        echo ""
         
-        [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Raw selection output: '$selected'" >&2
-        
-        # Extract just the component IDs from the selection
-        # The selected output will be in format: "component_id|description component_id|description"
-        local component_ids=""
-        for item in $selected; do
-            local id=$(echo "$item" | cut -d'|' -f1)
-            if [ -n "$id" ]; then
-                component_ids="$component_ids $id"
-            fi
+        for i in "${!component_ids[@]}"; do
+            echo "[x] $((i+1)). ${component_names[$i]}"
+            echo "    ${component_descs[$i]}"
+            echo ""
         done
         
-        # Return selected component IDs (trimmed)
-        local result="${component_ids## }"
-        [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Returning component IDs: '$result'" >&2
-        echo "$result"
+        echo "All components are selected by default."
+        echo -n "Press Enter to confirm, or 'n' to skip component installation: "
+    } >/dev/tty
+    
+    # Read user input from terminal
+    local response
+    read -r response </dev/tty
+    
+    if [[ "$response" =~ ^[nN] ]]; then
+        echo_debug "ASCII-SELECTOR: User chose to skip components" >&2
+        echo ""
         return 0
     else
-        local exit_code=$?
-        [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: ASCII select failed with exit code: $exit_code" >&2
-        # User cancelled or error occurred
-        return 1
+        echo_debug "ASCII-SELECTOR: User confirmed all components" >&2
+        # Return all component IDs
+        echo "${component_ids[@]}"
+        return 0
     fi
+}
+
+# ASCII selection (fallback to simple version)
+ascii_component_select() {
+    echo_debug "ASCII-SELECTOR: ascii_component_select called" >&2
+    
+    # Use the simpler ASCII selection that works reliably
+    simple_ascii_select
 }
 
 # Preset selection with ASCII
