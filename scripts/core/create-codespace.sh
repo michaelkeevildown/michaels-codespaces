@@ -35,6 +35,7 @@ source "$MODULES_DIR/networking/port-manager.sh"
 source "$MODULES_DIR/storage/env-manager.sh"
 source "$MODULES_DIR/components/registry.sh"
 source "$MODULES_DIR/components/interactive-selector.sh"
+source "$MODULES_DIR/components/simple-selector.sh"
 source "$MODULES_DIR/components/manifest-generator.sh"
 
 # Source utilities using path module
@@ -80,7 +81,8 @@ Options:
   --env-file <file> Environment variables file
   --components <list> Comma-separated list of components to install
   --preset <name>   Use a component preset (ai-dev, full-stack, minimal)
-  --interactive     Interactive component selection
+  --interactive     Force interactive component selection (default)
+  --no-interactive  Skip component selection
   --no-start        Don't start the container after creation
   --force           Overwrite existing codespace
   --shallow         Use shallow clone (depth=1) for faster cloning
@@ -94,7 +96,7 @@ Examples:
   $0 git@github.com:user/repo.git --name my-project --ports "8090:8080"
   $0 https://github.com/homebrew/homebrew-core.git --shallow
   $0 git@github.com:torvalds/linux.git --depth 10
-  $0 https://github.com/user/repo.git --interactive
+  $0 https://github.com/user/repo.git --no-interactive
   $0 git@github.com:user/repo.git --components github-cli,claude,claude-flow
   $0 https://github.com/user/repo.git --preset ai-dev
 
@@ -188,6 +190,10 @@ parse_arguments() {
                 ;;
             --interactive)
                 INTERACTIVE=true
+                shift
+                ;;
+            --no-interactive)
+                INTERACTIVE=false
                 shift
                 ;;
             git@*|https://github.com/*|http://github.com/*|https://gitlab.com/*|http://gitlab.com/*|*.git)
@@ -287,12 +293,27 @@ create_codespace() {
     # Handle component selection
     local selected_components=""
     
+    # If no component-related flags were provided, default to interactive mode
+    if [ -z "$COMPONENTS" ] && [ -z "$PRESET" ] && [ "$INTERACTIVE" != "false" ]; then
+        INTERACTIVE=true
+    fi
+    
     if [ "$INTERACTIVE" == "true" ]; then
-        echo_info "Starting interactive component selection..."
-        selected_components=$(interactive_select) || {
-            echo_warning "Component selection cancelled, continuing without components"
-            selected_components=""
-        }
+        echo ""
+        echo_info "Component selection..."
+        echo ""
+        
+        # Try interactive selection first, fall back to simple if it fails
+        if selected_components=$(interactive_select 2>/dev/null); then
+            echo ""
+        else
+            # Fall back to simple selection
+            echo_debug "Interactive selection failed, using simple selection"
+            selected_components=$(simple_select) || {
+                echo_warning "Component selection cancelled, continuing without components"
+                selected_components=""
+            }
+        fi
     elif [ -n "$PRESET" ]; then
         echo_info "Loading preset: $PRESET"
         selected_components=$(load_preset "$PRESET") || {

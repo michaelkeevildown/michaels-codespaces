@@ -223,8 +223,21 @@ get_selected_components() {
 
 # Main interactive selection
 interactive_select() {
+    # Check if terminal supports interactive mode
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        echo_error "Terminal does not support interactive mode"
+        echo_info "Use --components or --preset flags instead"
+        return 1
+    fi
+    
     # Initialize
     init_menu
+    
+    # Check if we have components to display
+    if [ ${#MENU_ITEMS[@]} -eq 0 ]; then
+        echo_error "No components available"
+        return 1
+    fi
     
     # Clear screen space
     printf '\n%.0s' {1..20}
@@ -234,10 +247,10 @@ interactive_select() {
     printf '\033[?25l'
     
     # Set up trap to restore terminal on exit
-    trap 'printf "\033[?25h"; stty echo' EXIT
+    trap 'printf "\033[?25h"; stty echo 2>/dev/null || true' EXIT INT TERM
     
     # Disable echo
-    stty -echo
+    stty -echo 2>/dev/null || true
     
     # Main loop
     while true; do
