@@ -4,6 +4,23 @@
 > 
 > Transform any Ubuntu machine into a powerful development platform. Create isolated, browser-based VS Code environments for all your GitHub repositories. Work from anywhere, on any device, with just a web browser.
 
+## 🌟 WHY This Exists
+
+**The future of coding is here, and it's powered by AI agents.**
+
+With the rise of Claude, Claude Flow, and other autonomous coding systems, we're not just writing code faster—we're fundamentally changing *how* code gets written. These AI agents can work 24/7, tackle multiple projects simultaneously, and iterate at speeds impossible for humans alone.
+
+But here's the challenge: **These powerful agents need safe, isolated environments where they can work without constraints or risks.**
+
+That's why I built Michael's Codespaces. I believe in a world where:
+- 🤖 You can unleash AI agents on your code without fear of them "going rogue"
+- 💻 Each project runs in its own isolated Docker container—a sealed sandbox
+- 🏠 Everything runs on YOUR hardware—no cloud vendor lock-in or spiralling costs
+- 🚀 Multiple AI agents can work simultaneously on different projects
+- 🎯 You maintain complete control whilst democratising AI-powered development
+
+**[→ Read the full story behind WHY.md](WHY.md)**
+
 <p align="center">
   <img src="https://img.shields.io/badge/Ubuntu-20.04+-E95420?style=for-the-badge&logo=ubuntu&logoColor=white" alt="Ubuntu">
   <img src="https://img.shields.io/badge/Docker-20.10+-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
