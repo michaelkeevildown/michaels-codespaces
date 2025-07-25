@@ -7,9 +7,10 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Source utilities
-if [ -f "$HOME/codespaces/scripts/utils/colors.sh" ]; then
-    source "$HOME/codespaces/scripts/utils/colors.sh"
+# Source utilities - use CODESPACE_HOME if available
+UTILS_DIR="${CODESPACE_HOME:-$(cd "$SCRIPT_DIR/../../../.." && pwd)}/scripts/utils"
+if [ -f "$UTILS_DIR/colors.sh" ]; then
+    source "$UTILS_DIR/colors.sh"
 else
     echo_info() { echo "ℹ️  $1"; }
     echo_success() { echo "✅ $1"; }

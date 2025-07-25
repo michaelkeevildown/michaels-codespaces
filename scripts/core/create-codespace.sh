@@ -22,9 +22,10 @@ source "$MODULES_DIR/components/registry.sh"
 source "$MODULES_DIR/components/interactive-selector.sh"
 source "$MODULES_DIR/components/manifest-generator.sh"
 
-# Source utilities
-if [ -f "$HOME/codespaces/scripts/utils/colors.sh" ]; then
-    source "$HOME/codespaces/scripts/utils/colors.sh"
+# Source utilities - use CODESPACE_HOME if available, otherwise relative path
+UTILS_DIR="${CODESPACE_HOME:-$(cd "$SCRIPT_DIR/../.." && pwd)}/scripts/utils"
+if [ -f "$UTILS_DIR/colors.sh" ]; then
+    source "$UTILS_DIR/colors.sh"
 else
     echo_info() { echo "ℹ️  $1"; }
     echo_success() { echo "✅ $1"; }
