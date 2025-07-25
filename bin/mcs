@@ -13,7 +13,7 @@ if [ -f "$SCRIPT_PATH/../scripts/core/create-codespace.sh" ]; then
     CODESPACE_HOME="$(cd "$SCRIPT_PATH/.." && pwd)"
 else
     # Running from installed location
-    CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.michaels-codespaces}"
+    CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.mcs}"
 fi
 
 # Configuration
@@ -34,10 +34,11 @@ if [[ -t 1 ]]; then
     tty_purple=$(printf '\033[35m')
     tty_cyan=$(printf '\033[36m')
     tty_bold=$(printf '\033[1m')
+    tty_dim=$(printf '\033[2m')
     tty_reset=$(printf '\033[0m')
 else
     tty_red='' tty_green='' tty_yellow='' tty_blue=''
-    tty_purple='' tty_cyan='' tty_bold='' tty_reset=''
+    tty_purple='' tty_cyan='' tty_bold='' tty_dim='' tty_reset=''
 fi
 
 # Helper functions
@@ -55,6 +56,68 @@ warning() {
 
 error() {
     printf "${tty_red}✗${tty_reset} %s\n" "$1" >&2
+}
+
+# Source config manager for auto-update functionality
+if [ -f "$CODESPACE_HOME/scripts/modules/storage/config-manager.sh" ]; then
+    source "$CODESPACE_HOME/scripts/modules/storage/config-manager.sh"
+fi
+
+# Check for updates
+check_for_updates() {
+    # Skip if disabled via environment variable
+    if [ "${MCS_NO_AUTO_UPDATE:-}" = "1" ] || [ "${MCS_NO_AUTO_UPDATE:-}" = "true" ]; then
+        return 0
+    fi
+    
+    # Skip if config manager not available
+    if ! command -v should_check_for_update >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    # Check if we should check for updates
+    if ! should_check_for_update; then
+        return 0
+    fi
+    
+    # Update the last check timestamp
+    set_last_update_check "$(date +%s)"
+    
+    # Perform the update check in background with timeout
+    (
+        # Set a timeout for the git operation
+        if command -v timeout >/dev/null 2>&1; then
+            timeout_cmd="timeout 5"
+        else
+            # macOS doesn't have timeout by default, use alternative
+            timeout_cmd=""
+        fi
+        
+        cd "$CODESPACE_HOME" 2>/dev/null || exit 0
+        
+        # Fetch updates quietly
+        if $timeout_cmd git fetch --quiet origin main 2>/dev/null; then
+            # Check if we're behind
+            local local_sha=$(git rev-parse HEAD 2>/dev/null)
+            local remote_sha=$(git rev-parse origin/main 2>/dev/null)
+            
+            if [ "$local_sha" != "$remote_sha" ]; then
+                # Get commit count difference
+                local behind_count=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
+                
+                if [ "$behind_count" -gt 0 ]; then
+                    echo ""
+                    info "Auto-update: New version available!"
+                    echo "   ${tty_dim}$behind_count new commit(s) behind origin/main${tty_reset}"
+                    echo "   Run '${tty_bold}mcs update${tty_reset}' to update Michael's Codespaces"
+                    echo ""
+                fi
+            fi
+        fi
+    ) &
+    
+    # Don't wait for the background check
+    return 0
 }
 
 # Get safe repo name from URL
@@ -269,9 +332,9 @@ cmd_info() {
     
     # Get access IP
     local access_ip="localhost"
-    if [ -f "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" ]; then
-        source "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh" 2>/dev/null || true
-        source "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" 2>/dev/null || true
+    if [ -f "$HOME/.mcs/scripts/modules/network/network-utils.sh" ]; then
+        source "$HOME/.mcs/scripts/modules/storage/config-manager.sh" 2>/dev/null || true
+        source "$HOME/.mcs/scripts/modules/network/network-utils.sh" 2>/dev/null || true
         access_ip=$(get_access_ip 2>/dev/null || echo "localhost")
     fi
     
@@ -327,9 +390,45 @@ cmd_status() {
 
 cmd_update() {
     info "Updating Michael's Codespaces..."
-    cd "$HOME/.michaels-codespaces"
-    git pull origin main
-    success "Updated to latest version"
+    
+    cd "$CODESPACE_HOME" || {
+        error "Could not change to MCS directory"
+        exit 1
+    }
+    
+    # Get current version before update
+    local current_sha=$(git rev-parse --short HEAD 2>/dev/null)
+    
+    # Perform the update
+    if git pull origin main; then
+        # Get new version after update
+        local new_sha=$(git rev-parse --short HEAD 2>/dev/null)
+        
+        if [ "$current_sha" != "$new_sha" ]; then
+            # Show what changed
+            echo ""
+            info "Changes in this update:"
+            git log --oneline --no-decorate "$current_sha..$new_sha" | while read line; do
+                echo "   • $line"
+            done
+            echo ""
+        fi
+        
+        # Update last update check timestamp
+        if command -v set_last_update_check >/dev/null 2>&1; then
+            set_last_update_check "$(date +%s)"
+        fi
+        
+        # Update known version
+        if command -v set_last_known_version >/dev/null 2>&1; then
+            set_last_known_version "$VERSION"
+        fi
+        
+        success "Updated to latest version"
+    else
+        error "Failed to update. Please check your internet connection and try again."
+        exit 1
+    fi
 }
 
 cmd_recover() {
@@ -351,9 +450,9 @@ cmd_recover() {
     
     # Get access IP (try to source network-utils or use localhost)
     local access_ip="localhost"
-    if [ -f "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" ]; then
-        source "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh" 2>/dev/null || true
-        source "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh" 2>/dev/null || true
+    if [ -f "$HOME/.mcs/scripts/modules/network/network-utils.sh" ]; then
+        source "$HOME/.mcs/scripts/modules/storage/config-manager.sh" 2>/dev/null || true
+        source "$HOME/.mcs/scripts/modules/network/network-utils.sh" 2>/dev/null || true
         access_ip=$(get_access_ip 2>/dev/null || echo "localhost")
     fi
     
@@ -446,10 +545,10 @@ cmd_cleanup() {
     
     # Remove mcs from PATH (if it was added)
     if [ -f ~/.zshrc ]; then
-        sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.zshrc
+        sed -i.bak '/export PATH.*\.mcs\/bin/d' ~/.zshrc
     fi
     if [ -f ~/.bashrc ]; then
-        sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.bashrc
+        sed -i.bak '/export PATH.*\.mcs\/bin/d' ~/.bashrc
     fi
     
     success "MCS installation removed!"
@@ -487,12 +586,12 @@ cmd_destroy() {
         if [ -f ~/.zshrc ]; then
             sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.zshrc
             sed -i.bak '/# Codespace:/,+1d' ~/.zshrc
-            sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.zshrc
+            sed -i.bak '/export PATH.*\.mcs\/bin/d' ~/.zshrc
         fi
         
         if [ -f ~/.bashrc ]; then
             sed -i.bak '/# Michael.s Codespaces aliases/,/# End Michael.s Codespaces aliases/d' ~/.bashrc
-            sed -i.bak '/export PATH.*\.michaels-codespaces\/bin/d' ~/.bashrc
+            sed -i.bak '/export PATH.*\.mcs\/bin/d' ~/.bashrc
         fi
         
         success "MCS files and codespaces removed"
@@ -685,6 +784,108 @@ update_codespace_urls() {
     return 0
 }
 
+cmd_autoupdate() {
+    local subcommand="${1:-status}"
+    shift || true
+    
+    case "$subcommand" in
+        on|enable)
+            set_auto_update_enabled "true"
+            success "Auto-update enabled"
+            ;;
+        off|disable)
+            set_auto_update_enabled "false"
+            success "Auto-update disabled"
+            ;;
+        interval)
+            if [ -z "$1" ]; then
+                error "Usage: mcs autoupdate interval <seconds>"
+                echo "Current interval: $(get_auto_update_interval) seconds"
+                exit 1
+            fi
+            
+            # Validate the interval is a number
+            if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+                error "Interval must be a positive number in seconds"
+                exit 1
+            fi
+            
+            # Minimum interval is 1 hour (3600 seconds)
+            if [ "$1" -lt 3600 ]; then
+                error "Interval must be at least 3600 seconds (1 hour)"
+                exit 1
+            fi
+            
+            set_auto_update_interval "$1"
+            success "Auto-update interval set to $1 seconds"
+            ;;
+        status)
+            printf "${tty_bold}Auto-update Status${tty_reset}\n"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            local enabled=$(is_auto_update_enabled && echo "enabled" || echo "disabled")
+            local interval=$(get_auto_update_interval)
+            local last_check=$(get_last_update_check)
+            local last_version=$(get_last_known_version)
+            
+            echo "Status: ${tty_bold}$enabled${tty_reset}"
+            echo "Check interval: ${tty_bold}$interval${tty_reset} seconds ($(($interval / 3600)) hours)"
+            
+            if [ "$last_check" != "0" ]; then
+                local last_check_date=$(date -r "$last_check" 2>/dev/null || date -d "@$last_check" 2>/dev/null || echo "unknown")
+                echo "Last check: $last_check_date"
+                
+                # Calculate next check time
+                local next_check=$((last_check + interval))
+                local current_time=$(date +%s)
+                if [ $next_check -gt $current_time ]; then
+                    local time_until_next=$((next_check - current_time))
+                    echo "Next check: in $(($time_until_next / 60)) minutes"
+                else
+                    echo "Next check: on next mcs command"
+                fi
+            else
+                echo "Last check: never"
+                echo "Next check: on next mcs command"
+            fi
+            
+            echo "Last known version: $last_version"
+            echo ""
+            echo "${tty_dim}Tip: Set MCS_NO_AUTO_UPDATE=1 to temporarily disable checks${tty_reset}"
+            ;;
+        help|--help|-h)
+            cat << EOF
+${tty_bold}mcs autoupdate - Configure automatic update checking${tty_reset}
+
+${tty_bold}Usage:${tty_reset} mcs autoupdate <subcommand> [options]
+
+${tty_bold}Subcommands:${tty_reset}
+  ${tty_cyan}status${tty_reset}              Show current auto-update configuration (default)
+  ${tty_cyan}on${tty_reset}, ${tty_cyan}enable${tty_reset}        Enable automatic update checking
+  ${tty_cyan}off${tty_reset}, ${tty_cyan}disable${tty_reset}      Disable automatic update checking
+  ${tty_cyan}interval${tty_reset} <seconds>  Set update check interval (minimum: 3600)
+  ${tty_cyan}help${tty_reset}               Show this help message
+
+${tty_bold}Examples:${tty_reset}
+  mcs autoupdate                    # Show current status
+  mcs autoupdate on                 # Enable auto-update
+  mcs autoupdate off                # Disable auto-update
+  mcs autoupdate interval 86400     # Check once per day
+  mcs autoupdate interval 43200     # Check twice per day
+
+${tty_bold}Environment Variables:${tty_reset}
+  MCS_NO_AUTO_UPDATE=1    Temporarily disable update checks
+
+EOF
+            ;;
+        *)
+            error "Unknown subcommand: $subcommand"
+            echo "Run 'mcs autoupdate help' for usage"
+            exit 1
+            ;;
+    esac
+}
+
 cmd_doctor() {
     printf "${tty_bold}Michael's Codespaces Doctor${tty_reset}\n"
     echo "─────────────────────────────"
@@ -798,6 +999,7 @@ ${tty_bold}Commands:${tty_reset}
   ${tty_cyan}reset-password${tty_reset} <name>  Reset the password for a codespace
   ${tty_cyan}status${tty_reset}                Show system and codespaces status
   ${tty_cyan}update${tty_reset}                Update Michael's Codespaces to latest version
+  ${tty_cyan}autoupdate${tty_reset}            Configure automatic update checking
   ${tty_cyan}update-ip${tty_reset}             Configure IP address for accessing codespaces
   ${tty_cyan}cleanup${tty_reset}               Remove MCS but keep Docker/system packages (soft cleanup)
   ${tty_cyan}destroy${tty_reset}               Completely remove MCS and all dependencies (factory reset)
@@ -822,6 +1024,34 @@ ${tty_bold}Cleanup Options:${tty_reset}
 ${tty_bold}More info:${tty_reset} https://github.com/michaelkeevildown/michaels-codespaces
 EOF
 }
+
+# Check if we should run update check for this command
+should_run_update_check() {
+    local cmd="$1"
+    case "$cmd" in
+        create|new|list|ls|start|up|stop|down|restart|remove|rm|delete|exec|run|info|show|status|monitor)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Check for --no-auto-update flag
+NO_AUTO_UPDATE_FLAG=false
+for arg in "$@"; do
+    if [ "$arg" = "--no-auto-update" ]; then
+        NO_AUTO_UPDATE_FLAG=true
+        # Remove the flag from arguments
+        set -- "${@/--no-auto-update/}"
+    fi
+done
+
+# Run update check if applicable and not disabled
+if [ "$NO_AUTO_UPDATE_FLAG" = false ] && should_run_update_check "${1:-help}"; then
+    check_for_updates
+fi
 
 # Main command dispatcher
 case "${1:-help}" in
@@ -866,6 +1096,10 @@ case "${1:-help}" in
     update|upgrade)
         cmd_update
         ;;
+    autoupdate)
+        shift
+        cmd_autoupdate "$@"
+        ;;
     update-ip|ip)
         shift
         cmd_update_ip "$@"
@@ -888,7 +1122,8 @@ case "${1:-help}" in
         cmd_doctor
         ;;
     help|--help|-h)
-        cmd_help
+        shift
+        cmd_help "$@"
         ;;
     version|--version|-v)
         echo "mcs version $VERSION"

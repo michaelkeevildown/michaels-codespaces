@@ -64,7 +64,7 @@ mcs create https://github.com/homebrew/homebrew-core.git --depth 0
 
 1. **Update the branch on your VM:**
    ```bash
-   cd ~/.michaels-codespaces
+   cd ~/.mcs
    git pull origin enhance-container-creation
    ```
 

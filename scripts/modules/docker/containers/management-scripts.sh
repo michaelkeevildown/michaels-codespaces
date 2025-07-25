@@ -19,14 +19,14 @@ create_codespace_readme() {
     local access_ip="localhost"
     # Try multiple paths for network utilities
     local network_utils_paths=(
-        "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh"
+        "$HOME/.mcs/scripts/modules/network/network-utils.sh"
         "$HOME/codespaces/scripts/modules/network/network-utils.sh"
         "$(dirname "${BASH_SOURCE[0]}")/../network/network-utils.sh"
     )
     
     # Also need to source config-manager first
     local config_manager_paths=(
-        "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh"
+        "$HOME/.mcs/scripts/modules/storage/config-manager.sh"
         "$HOME/codespaces/scripts/modules/storage/config-manager.sh"
         "$(dirname "${BASH_SOURCE[0]}")/../storage/config-manager.sh"
     )
@@ -292,14 +292,14 @@ display_codespace_success() {
     local access_url="http://localhost:$vs_code_port"
     # Try multiple paths for network utilities
     local network_utils_paths=(
-        "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh"
+        "$HOME/.mcs/scripts/modules/network/network-utils.sh"
         "$HOME/codespaces/scripts/modules/network/network-utils.sh"
         "$(dirname "${BASH_SOURCE[0]}")/../network/network-utils.sh"
     )
     
     # Also need to source config-manager first
     local config_manager_paths=(
-        "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh"
+        "$HOME/.mcs/scripts/modules/storage/config-manager.sh"
         "$HOME/codespaces/scripts/modules/storage/config-manager.sh"
         "$(dirname "${BASH_SOURCE[0]}")/../storage/config-manager.sh"
     )

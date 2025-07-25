@@ -16,6 +16,12 @@ _mcs() {
         'info:Show detailed information about a codespace'
         'status:Show system and codespaces status'
         'update:Update Michael'"'"'s Codespaces to latest version'
+        'autoupdate:Configure automatic update checking'
+        'update-ip:Configure IP address for accessing codespaces'
+        'recover:Recover VS Code URL and password for a codespace'
+        'reset-password:Reset the password for a codespace'
+        'cleanup:Remove MCS but keep Docker/system packages'
+        'destroy:Completely remove MCS and all dependencies'
         'doctor:Check system health and configuration'
         'help:Show help message'
     )
@@ -33,6 +39,9 @@ _mcs() {
         'show:Alias for info'
         'monitor:Alias for status'
         'upgrade:Alias for update'
+        'ip:Alias for update-ip'
+        'clean:Alias for cleanup'
+        'uninstall:Alias for destroy'
         'check:Alias for doctor'
     )
     
@@ -45,7 +54,7 @@ _mcs() {
             ;;
         args)
             case $words[2] in
-                start|stop|restart|remove|rm|delete|logs|log|exec|run|info|show|up|down)
+                start|stop|restart|remove|rm|delete|logs|log|exec|run|info|show|up|down|recover|reset-password)
                     # Get codespace names
                     local -a codespaces
                     if [ -d "$HOME/codespaces" ]; then
@@ -62,6 +71,19 @@ _mcs() {
                     ;;
                 create|new)
                     _message 'repository URL'
+                    ;;
+                autoupdate)
+                    local -a autoupdate_commands
+                    autoupdate_commands=(
+                        'status:Show current auto-update configuration'
+                        'on:Enable automatic update checking'
+                        'off:Disable automatic update checking'
+                        'enable:Enable automatic update checking'
+                        'disable:Disable automatic update checking'
+                        'interval:Set update check interval'
+                        'help:Show autoupdate help'
+                    )
+                    _describe 'autoupdate command' autoupdate_commands
                     ;;
             esac
             ;;

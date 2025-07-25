@@ -37,7 +37,7 @@ error() {
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="$HOME/.michaels-codespaces"
+INSTALL_DIR="$HOME/.mcs"
 CODESPACES_DIR="$HOME/codespaces"
 
 info "Installing Michael's Codespaces..."

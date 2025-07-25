@@ -17,7 +17,7 @@ get_codespace_home() {
             echo "$potential_home"
         else
             # Fall back to default location
-            echo "$HOME/.michaels-codespaces"
+            echo "$HOME/.mcs"
         fi
     fi
 }
