@@ -91,7 +91,15 @@ if [ "$INSTALL_MODE" = "production" ]; then
     info "Setting up git repository for updates..."
     cd "$INSTALL_DIR"
     git init
-    git remote add origin https://github.com/michaelkeevildown/ubuntu-codespace.git
+    
+    # Check if remote already exists and handle appropriately
+    if git remote get-url origin >/dev/null 2>&1; then
+        info "Updating existing git remote..."
+        git remote set-url origin https://github.com/michaelkeevildown/michaels-codespaces.git
+    else
+        git remote add origin https://github.com/michaelkeevildown/michaels-codespaces.git
+    fi
+    
     git fetch origin main
     git reset --hard origin/main
     success "Git repository configured"

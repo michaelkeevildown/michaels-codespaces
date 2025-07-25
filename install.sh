@@ -8,7 +8,7 @@ set -e
 
 # Configuration
 CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.mcs}"
-CODESPACE_REPO="https://github.com/michaelkeevildown/ubuntu-codespace.git"
+CODESPACE_REPO="https://github.com/michaelkeevildown/michaels-codespaces.git"
 CODESPACE_SCRIPTS="$HOME/codespaces"
 CODESPACE_BRANCH="${CODESPACE_BRANCH:-main}"
 
