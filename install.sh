@@ -8,7 +8,7 @@ set -e
 
 # Configuration
 CODESPACE_HOME="${CODESPACE_HOME:-$HOME/.mcs}"
-CODESPACE_REPO="https://github.com/michaelkeevildown/michaels-codespaces.git"
+CODESPACE_REPO="https://github.com/michaelkeevildown/ubuntu-codespace.git"
 CODESPACE_SCRIPTS="$HOME/codespaces"
 CODESPACE_BRANCH="${CODESPACE_BRANCH:-main}"
 
@@ -111,13 +111,13 @@ main() {
         rm -rf "$CODESPACE_HOME"
     fi
     
-    # Clone repository
+    # Clone repository (no depth limit for auto-updates)
     info "Installing Michael's Codespaces to $CODESPACE_HOME..."
     if [[ "$CODESPACE_BRANCH" != "main" ]]; then
         info "Using branch: $CODESPACE_BRANCH"
-        git clone --depth=1 --branch "$CODESPACE_BRANCH" "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
+        git clone --branch "$CODESPACE_BRANCH" "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
     else
-        git clone --depth=1 "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
+        git clone "$CODESPACE_REPO" "$CODESPACE_HOME" || abort "Failed to clone repository"
     fi
     
     # Run setup from the cloned repository
@@ -128,13 +128,11 @@ main() {
     find scripts -name "*.sh" -exec chmod +x {} \;
     chmod +x bin/mcs
     
-    # Run main setup - Homebrew style
-    if [ -f ./scripts/core/main-setup-homebrew.sh ]; then
-        ./scripts/core/main-setup-homebrew.sh || abort "Setup failed"
-    elif [ -f ./scripts/core/main-setup.sh ]; then
-        ./scripts/core/main-setup.sh || abort "Setup failed"
+    # Run the installation script
+    if [ -f ./install-mcs.sh ]; then
+        ./install-mcs.sh || abort "Installation failed"
     else
-        abort "No setup script found"
+        abort "Installation script not found"
     fi
     
     # Install key scripts to user's home

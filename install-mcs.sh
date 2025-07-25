@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Michael's Codespaces Installation Script
-# Properly sets up paths and symlinks for MCS
+# Installs MCS directly to ~/.mcs
 
 set -e
 
@@ -56,7 +56,7 @@ if [ ! -d "$CODESPACES_DIR" ]; then
 fi
 
 # Handle installation directory
-if [ -d "$INSTALL_DIR" ] && [ ! -L "$INSTALL_DIR" ]; then
+if [ -d "$INSTALL_DIR" ]; then
     warning "Installation directory already exists: $INSTALL_DIR"
     read -p "Do you want to replace it? [y/N] " -n 1 -r
     echo
@@ -70,14 +70,10 @@ if [ -d "$INSTALL_DIR" ] && [ ! -L "$INSTALL_DIR" ]; then
     fi
 fi
 
-# Create symlink to installation directory
-if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
-    info "Creating installation symlink..."
-    ln -sfn "$SCRIPT_DIR" "$INSTALL_DIR"
-    success "Created symlink: $INSTALL_DIR -> $SCRIPT_DIR"
-else
-    info "Already installed in the correct location"
-fi
+# Copy all files to installation directory
+info "Installing MCS to $INSTALL_DIR..."
+cp -r "$SCRIPT_DIR" "$INSTALL_DIR"
+success "Installed MCS to $INSTALL_DIR"
 
 # Ensure bin directory is in PATH
 info "Setting up PATH..."
@@ -109,12 +105,12 @@ fi
 
 # Make all scripts executable
 info "Making scripts executable..."
-chmod +x "$SCRIPT_DIR/bin/mcs"
-chmod +x "$SCRIPT_DIR/scripts/core/"*.sh
-chmod +x "$SCRIPT_DIR/scripts/modules/components/"*.sh
-chmod +x "$SCRIPT_DIR/scripts/modules/components/installers/"*.sh
-chmod +x "$SCRIPT_DIR/scripts/templates/"*.sh
-find "$SCRIPT_DIR/scripts" -name "*.sh" -type f -exec chmod +x {} \;
+chmod +x "$INSTALL_DIR/bin/mcs"
+chmod +x "$INSTALL_DIR/scripts/core/"*.sh 2>/dev/null || true
+chmod +x "$INSTALL_DIR/scripts/modules/components/"*.sh 2>/dev/null || true
+chmod +x "$INSTALL_DIR/scripts/modules/components/installers/"*.sh 2>/dev/null || true
+chmod +x "$INSTALL_DIR/scripts/templates/"*.sh 2>/dev/null || true
+find "$INSTALL_DIR/scripts" -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
 success "Scripts are now executable"
 
 # Create necessary directories
@@ -124,14 +120,20 @@ mkdir -p "$CODESPACES_DIR/shared"
 mkdir -p "$CODESPACES_DIR/backups"
 success "Created required directories"
 
-# Set up environment variable
-info "Setting up environment variables..."
-echo "export CODESPACE_HOME=\"$INSTALL_DIR\"" > "$INSTALL_DIR/.env"
-success "Created environment configuration"
+# Initialize git repository in .mcs for updates
+if [ ! -d "$INSTALL_DIR/.git" ]; then
+    info "Initializing git repository for updates..."
+    cd "$INSTALL_DIR"
+    git init
+    git remote add origin git@github.com:michaelkeevildown/ubuntu-codespace.git
+    git fetch origin main
+    git reset --hard origin/main
+    success "Git repository initialized"
+fi
 
 # Verify installation
 info "Verifying installation..."
-if [ -L "$INSTALL_DIR" ] && [ -d "$INSTALL_DIR" ]; then
+if [ -d "$INSTALL_DIR" ] && [ ! -L "$INSTALL_DIR" ]; then
     success "Installation directory verified"
 else
     error "Installation directory verification failed"

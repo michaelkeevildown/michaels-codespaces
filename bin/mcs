@@ -93,7 +93,15 @@ check_for_updates() {
             timeout_cmd=""
         fi
         
-        cd "$CODESPACE_HOME" 2>/dev/null || exit 0
+        # MCS is always installed at ~/.mcs
+        local source_dir="$CODESPACE_HOME"
+        
+        # Ensure we have a git repository
+        if [ ! -d "$source_dir/.git" ]; then
+            return 0
+        fi
+        
+        cd "$source_dir" 2>/dev/null || exit 0
         
         # Fetch updates quietly
         if $timeout_cmd git fetch --quiet origin main 2>/dev/null; then
@@ -391,10 +399,17 @@ cmd_status() {
 cmd_update() {
     info "Updating Michael's Codespaces..."
     
+    # MCS is always at ~/.mcs
     cd "$CODESPACE_HOME" || {
         error "Could not change to MCS directory"
         exit 1
     }
+    
+    # Ensure we have a git repository
+    if [ ! -d ".git" ]; then
+        error "MCS directory is not a git repository. Please reinstall MCS."
+        exit 1
+    fi
     
     # Get current version before update
     local current_sha=$(git rev-parse --short HEAD 2>/dev/null)
