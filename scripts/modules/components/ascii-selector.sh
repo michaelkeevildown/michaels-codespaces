@@ -13,8 +13,11 @@ UTILS_DIR="$SCRIPT_DIR/../../utils"
 if [ -f "$UTILS_DIR/ascii-select.sh" ]; then
     source "$UTILS_DIR/ascii-select.sh"
 else
-    echo "Error: ascii-select.sh not found" >&2
-    exit 1
+    echo "Error: ascii-select.sh not found at $UTILS_DIR/ascii-select.sh" >&2
+    # Return false for check function instead of exiting
+    check_ascii_select() { return 1; }
+    ascii_component_select() { return 1; }
+    ascii_component_selection() { return 1; }
 fi
 
 # Check if ascii-select is available
@@ -52,6 +55,14 @@ ascii_component_select() {
         return 1
     fi
     
+    # Debug: Show what we're about to display
+    [ "${DEBUG:-0}" -eq 1 ] && {
+        echo "DEBUG: About to show ASCII selection with components:" >&2
+        for comp in "${components[@]}"; do
+            echo "DEBUG:   $comp" >&2
+        done
+    }
+    
     # Show ASCII selection
     local selected
     if selected=$(ascii_select \
@@ -60,7 +71,9 @@ ascii_component_select() {
         --style simple \
         --delimiter " " \
         "Select components to install:" \
-        "${components[@]}"); then
+        "${components[@]}" 2>&1); then
+        
+        [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Raw selection output: '$selected'" >&2
         
         # Extract just the component IDs from the selection
         # The selected output will be in format: "component_id|description component_id|description"
@@ -73,10 +86,14 @@ ascii_component_select() {
         done
         
         # Return selected component IDs (trimmed)
-        echo "${component_ids## }"
+        local result="${component_ids## }"
+        [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Returning component IDs: '$result'" >&2
+        echo "$result"
         return 0
     else
-        # User cancelled
+        local exit_code=$?
+        [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: ASCII select failed with exit code: $exit_code" >&2
+        # User cancelled or error occurred
         return 1
     fi
 }
@@ -116,22 +133,12 @@ ascii_preset_select() {
 
 # Main selection function
 ascii_component_selection() {
-    # First show preset menu
-    local preset_result=$(ascii_preset_select)
-    local exit_code=$?
+    # Debug output
+    [ "${DEBUG:-0}" -eq 1 ] && echo "DEBUG: Starting ASCII component selection" >&2
     
-    if [ $exit_code -ne 0 ]; then
-        # User cancelled
-        return 1
-    fi
-    
-    if [ "$preset_result" = "CUSTOM" ]; then
-        # Show component selection
-        ascii_component_select
-    else
-        # Return preset result
-        echo "$preset_result"
-    fi
+    # Directly show component selection with all pre-selected
+    # This simplifies the flow and avoids the hanging preset menu
+    ascii_component_select
 }
 
 # Export functions

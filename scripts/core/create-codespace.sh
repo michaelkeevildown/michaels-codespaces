@@ -325,12 +325,22 @@ create_codespace() {
             echo_debug "Whiptail check failed"
         fi
         
-        # Force ASCII selector as the primary method
-        log_debug "Using ASCII selector for component selection"
-        selected_components=$(ascii_component_selection) || {
-            echo_warning "Component selection cancelled, continuing without components"
-            selected_components=""
-        }
+        # Try ASCII selector first
+        log_debug "Attempting ASCII selector for component selection"
+        
+        # Try ASCII selection with error handling
+        if ! selected_components=$(ascii_component_selection 2>&1); then
+            log_debug "ASCII selector failed or was cancelled, trying simple selection"
+            echo_info "Falling back to simple selection..."
+            
+            # Fall back to simple selection
+            selected_components=$(simple_select) || {
+                echo_warning "Component selection cancelled, continuing without components"
+                selected_components=""
+            }
+        else
+            log_debug "ASCII selection successful: $selected_components"
+        fi
     elif [ -n "$PRESET" ]; then
         echo_info "Loading preset: $PRESET"
         selected_components=$(load_preset "$PRESET") || {
