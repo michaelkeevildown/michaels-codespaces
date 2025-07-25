@@ -18,6 +18,9 @@ source "$MODULES_DIR/docker/containers/container-manager.sh"
 source "$MODULES_DIR/docker/containers/management-scripts.sh"
 source "$MODULES_DIR/networking/port-manager.sh"
 source "$MODULES_DIR/storage/env-manager.sh"
+source "$MODULES_DIR/components/registry.sh"
+source "$MODULES_DIR/components/interactive-selector.sh"
+source "$MODULES_DIR/components/manifest-generator.sh"
 
 # Source utilities
 if [ -f "$HOME/codespaces/scripts/utils/colors.sh" ]; then
@@ -63,6 +66,9 @@ Options:
   --language <lang> Language preset (node, python, go, rust, java)
   --ports <ports>   Port mappings (format: "8080:8080,3000:3000")
   --env-file <file> Environment variables file
+  --components <list> Comma-separated list of components to install
+  --preset <name>   Use a component preset (ai-dev, full-stack, minimal)
+  --interactive     Interactive component selection
   --no-start        Don't start the container after creation
   --force           Overwrite existing codespace
   --shallow         Use shallow clone (depth=1) for faster cloning
@@ -76,6 +82,9 @@ Examples:
   $0 git@github.com:user/repo.git --name my-project --ports "8090:8080"
   $0 https://github.com/homebrew/homebrew-core.git --shallow
   $0 git@github.com:torvalds/linux.git --depth 10
+  $0 https://github.com/user/repo.git --interactive
+  $0 git@github.com:user/repo.git --components github-cli,claude,claude-flow
+  $0 https://github.com/user/repo.git --preset ai-dev
 
 EOF
 }
@@ -92,6 +101,9 @@ parse_arguments() {
     FORCE=false
     FORCE_SHALLOW=false
     CLONE_DEPTH=""
+    COMPONENTS=""
+    PRESET=""
+    INTERACTIVE=false
     
     # Check for help
     if [ $# -eq 0 ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
@@ -152,6 +164,18 @@ parse_arguments() {
                 ;;
             --verbose)
                 export VERBOSE=1
+                shift
+                ;;
+            --components)
+                COMPONENTS="$2"
+                shift 2
+                ;;
+            --preset)
+                PRESET="$2"
+                shift 2
+                ;;
+            --interactive)
+                INTERACTIVE=true
                 shift
                 ;;
             git@*|https://github.com/*|http://github.com/*|https://gitlab.com/*|http://gitlab.com/*|*.git)
@@ -246,7 +270,36 @@ create_codespace() {
     
     log_info "Starting codespace creation: $SAFE_NAME"
     log_info "Repository URL: $REPO_URL"
-    log_variables "Initial Config" SAFE_NAME REPO_URL CODESPACE_DIR DOCKER_IMAGE LANGUAGE CUSTOM_PORTS FORCE NO_START
+    log_variables "Initial Config" SAFE_NAME REPO_URL CODESPACE_DIR DOCKER_IMAGE LANGUAGE CUSTOM_PORTS FORCE NO_START COMPONENTS PRESET INTERACTIVE
+    
+    # Handle component selection
+    local selected_components=""
+    
+    if [ "$INTERACTIVE" == "true" ]; then
+        echo_info "Starting interactive component selection..."
+        selected_components=$(interactive_select) || {
+            echo_warning "Component selection cancelled, continuing without components"
+            selected_components=""
+        }
+    elif [ -n "$PRESET" ]; then
+        echo_info "Loading preset: $PRESET"
+        selected_components=$(load_preset "$PRESET") || {
+            echo_error "Failed to load preset: $PRESET"
+            exit 1
+        }
+    elif [ -n "$COMPONENTS" ]; then
+        # Convert comma-separated to space-separated
+        selected_components=$(echo "$COMPONENTS" | tr ',' ' ')
+    fi
+    
+    # Validate selected components
+    if [ -n "$selected_components" ]; then
+        echo_info "Selected components: $selected_components"
+        if ! validate_components $selected_components; then
+            echo_error "Invalid components selected"
+            exit 1
+        fi
+    fi
     
     # Clean up if forcing
     if [ -d "$CODESPACE_DIR" ] && [ "$FORCE" == "true" ]; then
@@ -267,6 +320,11 @@ create_codespace() {
     # Create directory structure
     echo_info "Creating directory structure..."
     mkdir -p "$CODESPACE_DIR"/{src,data,config,logs}
+    
+    # Create component directories if components are selected
+    if [ -n "$selected_components" ]; then
+        mkdir -p "$CODESPACE_DIR"/{components,init}
+    fi
     
     # Clone repository
     echo_info "Cloning repository..."
@@ -363,12 +421,26 @@ create_codespace() {
     local password=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-16 2>/dev/null || \
                     tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
     
+    # Setup components if selected
+    if [ -n "$selected_components" ]; then
+        echo_info "Setting up components..."
+        
+        # Create component package
+        create_init_package "$CODESPACE_DIR/components" $selected_components
+        
+        # Create manifest for container
+        generate_manifest "$CODESPACE_DIR/init/components.manifest" $selected_components
+        
+        # Make component list available to docker-compose
+        config[components]="$selected_components"
+    fi
+    
     # Create environment file
     create_env_file "$CODESPACE_DIR" "$SAFE_NAME" "$REPO_URL" "$DOCKER_IMAGE" "$LANGUAGE" "$ports" "$password" "$ENV_FILE"
     
     # Generate docker-compose.yml
     echo_info "Generating Docker configuration..."
-    generate_docker_compose "$CODESPACE_DIR" "$ports" "$password"
+    generate_docker_compose "$CODESPACE_DIR" "$ports" "$password" "$selected_components"
     
     # Create management scripts
     create_management_scripts "$CODESPACE_DIR" "$SAFE_NAME" "$REPO_URL" "$DOCKER_IMAGE" "$LANGUAGE" "$ports" "$password"
@@ -396,6 +468,7 @@ generate_docker_compose() {
     local codespace_dir="$1"
     local ports="$2"
     local password="$3"
+    local components="$4"
     
     # Prepare configuration
     declare -A config
@@ -405,9 +478,12 @@ generate_docker_compose() {
     config[ports]="$ports"
     config[env_vars]=""
     config[labels]="codespace.repo=$(basename "$REPO_URL" .git)\ncodespace.created=$(date +%Y-%m-%d)\ncodespace.url=$REPO_URL"
+    config[language]="$LANGUAGE"
     
-    # Generate based on language if specified
-    if [ -n "$LANGUAGE" ]; then
+    # Generate based on components or language
+    if [ -n "$components" ]; then
+        generate_compose_with_components "$components" > "$codespace_dir/docker-compose.yml"
+    elif [ -n "$LANGUAGE" ]; then
         generate_language_compose "$LANGUAGE" > "$codespace_dir/docker-compose.yml"
     else
         generate_basic_compose > "$codespace_dir/docker-compose.yml"

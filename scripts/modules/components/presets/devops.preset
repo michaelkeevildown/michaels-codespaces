@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# DevOps Preset
+# Infrastructure and operations tools
+
+PRESET_DESCRIPTION="DevOps tools for infrastructure and container management"
+
+PRESET_COMPONENTS=(
+    "github-cli"
+    "docker-in-docker"
+    "aws-cli"
+    "terraform"
+    "k8s-tools"
+    "git-tools"
+)

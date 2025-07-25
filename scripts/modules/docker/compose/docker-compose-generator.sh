@@ -44,12 +44,14 @@ generate_basic_compose() {
     local networks="${config[networks]:-}"
     local labels="${config[labels]:-}"
     local healthcheck="${config[healthcheck]:-true}"
+    local components="${config[components]:-}"
+    local init_script="${config[init_script]:-}"
     
     # Extract codespace name from container name (remove -dev suffix)
     local codespace_name="${container_name%-dev}"
     
     # Log configuration values
-    log_variables "Docker Compose Config" container_name image password ports env_vars volumes networks labels healthcheck
+    log_variables "Docker Compose Config" container_name image password ports env_vars volumes networks labels healthcheck components
     
     cat << EOF
 services:
@@ -97,6 +99,12 @@ EOF
     echo "      - \${HOME}/.ssh:/home/coder/.ssh:ro"
     echo "      - \${HOME}/codespaces/auth/tokens:/home/coder/.tokens:ro"
     
+    # Add component-related volumes if components are enabled
+    if [ -n "$components" ]; then
+        echo "      - ./components:/opt/codespace/components:ro"
+        echo "      - ./init:/home/coder/.codespace-init"
+    fi
+    
     if [ -n "$volumes" ]; then
         echo "$volumes" | while IFS= read -r volume; do
             echo "      - $volume"
@@ -126,8 +134,15 @@ EOF
         log_debug "No labels specified"
     fi
     
-    # Add command - code-server runs with its own entrypoint
-    echo "    command: [\"--bind-addr\", \"0.0.0.0:8080\", \"--auth\", \"password\", \"/home/coder/${codespace_name}\"]"
+    # Add command or entrypoint based on components
+    if [ -n "$components" ] && [ -n "$init_script" ]; then
+        # Use custom entrypoint that runs init script then starts code-server
+        echo "    entrypoint: [\"/bin/bash\", \"-c\"]"
+        echo "    command: [\"bash /opt/codespace/components/init.sh && exec code-server --bind-addr 0.0.0.0:8080 --auth password /home/coder/${codespace_name}\"]"
+    else
+        # Default code-server command
+        echo "    command: [\"--bind-addr\", \"0.0.0.0:8080\", \"--auth\", \"password\", \"/home/coder/${codespace_name}\"]"
+    fi
     
     # Add healthcheck if enabled
     if [ "$healthcheck" == "true" ]; then
@@ -274,8 +289,31 @@ validate_compose() {
     fi
 }
 
+# Generate compose with component support
+generate_compose_with_components() {
+    local components="$1"
+    
+    # Add components to config
+    config[components]="$components"
+    config[init_script]="/opt/codespace/components/init.sh"
+    
+    # Add component environment variables
+    if [ -n "$components" ]; then
+        config[env_vars]="${config[env_vars]}\n      - CODESPACE_COMPONENTS=$components"
+        config[env_vars]="${config[env_vars]}\n      - CODESPACE_INIT_LOG=/home/coder/.codespace-init/init.log"
+    fi
+    
+    # Generate based on language or basic
+    if [ -n "${config[language]}" ]; then
+        generate_language_compose "${config[language]}"
+    else
+        generate_basic_compose
+    fi
+}
+
 # Export functions
 export -f generate_basic_compose
 export -f generate_language_compose
 export -f generate_from_devcontainer
+export -f generate_compose_with_components
 export -f validate_compose

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Full Stack Development Preset
+# Complete development environment with all tools
+
+PRESET_DESCRIPTION="Complete development environment with all available tools"
+
+PRESET_COMPONENTS=(
+    "github-cli"
+    "claude"
+    "claude-flow"
+    "docker-in-docker"
+    "aws-cli"
+    "terraform"
+    "node-tools"
+    "python-tools"
+    "k8s-tools"
+    "db-clients"
+    "vscode-extensions"
+    "git-tools"
+)
