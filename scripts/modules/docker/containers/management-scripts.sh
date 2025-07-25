@@ -17,10 +17,36 @@ create_codespace_readme() {
     
     # Source network utilities to get configured IP
     local access_ip="localhost"
-    if [ -f "$HOME/codespaces/scripts/modules/network/network-utils.sh" ]; then
-        source "$HOME/codespaces/scripts/modules/network/network-utils.sh"
-        access_ip=$(get_access_ip 2>/dev/null || echo "localhost")
-    fi
+    # Try multiple paths for network utilities
+    local network_utils_paths=(
+        "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh"
+        "$HOME/codespaces/scripts/modules/network/network-utils.sh"
+        "$(dirname "${BASH_SOURCE[0]}")/../network/network-utils.sh"
+    )
+    
+    # Also need to source config-manager first
+    local config_manager_paths=(
+        "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh"
+        "$HOME/codespaces/scripts/modules/storage/config-manager.sh"
+        "$(dirname "${BASH_SOURCE[0]}")/../storage/config-manager.sh"
+    )
+    
+    # Source config manager
+    for path in "${config_manager_paths[@]}"; do
+        if [ -f "$path" ]; then
+            source "$path"
+            break
+        fi
+    done
+    
+    # Then source network utils
+    for path in "${network_utils_paths[@]}"; do
+        if [ -f "$path" ]; then
+            source "$path"
+            access_ip=$(get_access_ip 2>/dev/null || echo "localhost")
+            break
+        fi
+    done
     
     cat > "$codespace_dir/README.md" << EOF
 # $safe_name Codespace
@@ -264,10 +290,36 @@ display_codespace_success() {
     
     # Source network utilities to get configured IP
     local access_url="http://localhost:$vs_code_port"
-    if [ -f "$HOME/codespaces/scripts/modules/network/network-utils.sh" ]; then
-        source "$HOME/codespaces/scripts/modules/network/network-utils.sh"
-        access_url=$(get_access_url "$vs_code_port" 2>/dev/null || echo "http://localhost:$vs_code_port")
-    fi
+    # Try multiple paths for network utilities
+    local network_utils_paths=(
+        "$HOME/.michaels-codespaces/scripts/modules/network/network-utils.sh"
+        "$HOME/codespaces/scripts/modules/network/network-utils.sh"
+        "$(dirname "${BASH_SOURCE[0]}")/../network/network-utils.sh"
+    )
+    
+    # Also need to source config-manager first
+    local config_manager_paths=(
+        "$HOME/.michaels-codespaces/scripts/modules/storage/config-manager.sh"
+        "$HOME/codespaces/scripts/modules/storage/config-manager.sh"
+        "$(dirname "${BASH_SOURCE[0]}")/../storage/config-manager.sh"
+    )
+    
+    # Source config manager
+    for path in "${config_manager_paths[@]}"; do
+        if [ -f "$path" ]; then
+            source "$path"
+            break
+        fi
+    done
+    
+    # Then source network utils
+    for path in "${network_utils_paths[@]}"; do
+        if [ -f "$path" ]; then
+            source "$path"
+            access_url=$(get_access_url "$vs_code_port" 2>/dev/null || echo "http://localhost:$vs_code_port")
+            break
+        fi
+    done
     
     echo ""
     echo_success "🎉 Codespace created successfully!"
