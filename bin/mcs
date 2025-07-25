@@ -71,6 +71,11 @@ cmd_create() {
 }
 
 cmd_list() {
+    # Source network utilities to get configured IP
+    if [ -f "$CODESPACE_HOME/scripts/modules/network/network-utils.sh" ]; then
+        source "$CODESPACE_HOME/scripts/modules/network/network-utils.sh"
+    fi
+    
     printf "${tty_bold}Codespaces:${tty_reset}\n"
     printf "${tty_cyan}%-30s %-10s %-30s${tty_reset}\n" "NAME" "STATUS" "URL"
     printf "%-30s %-10s %-30s\n" "----" "------" "---"
@@ -88,8 +93,9 @@ cmd_list() {
                     
                     # Check if running
                     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
+                        local access_url=$(get_access_url "$vs_code_port" 2>/dev/null || echo "http://localhost:$vs_code_port")
                         printf "${tty_green}%-30s${tty_reset} %-10s %-30s\n" \
-                            "$basename" "running" "http://localhost:$vs_code_port"
+                            "$basename" "running" "$access_url"
                     else
                         printf "%-30s ${tty_yellow}%-10s${tty_reset} %-30s\n" \
                             "$basename" "stopped" "port $vs_code_port"
@@ -118,12 +124,18 @@ cmd_start() {
     fi
     
     info "Starting $1..."
+    # Source network utilities to get configured IP
+    if [ -f "$CODESPACE_HOME/scripts/modules/network/network-utils.sh" ]; then
+        source "$CODESPACE_HOME/scripts/modules/network/network-utils.sh"
+    fi
+    
     docker-compose -f "$codespace_dir/docker-compose.yml" up -d
     
     if [ -f "$codespace_dir/.env" ]; then
         local vs_code_port=$(grep "VS_CODE_PORT=" "$codespace_dir/.env" | cut -d'=' -f2)
         local password=$(grep "PASSWORD=" "$codespace_dir/.env" | cut -d'=' -f2)
-        success "Started! Access at: ${tty_bold}http://localhost:$vs_code_port${tty_reset}"
+        local access_url=$(get_access_url "$vs_code_port" 2>/dev/null || echo "http://localhost:$vs_code_port")
+        success "Started! Access at: ${tty_bold}$access_url${tty_reset}"
         echo "   Password: $password"
     fi
 }
@@ -440,6 +452,109 @@ cmd_destroy() {
     fi
 }
 
+cmd_update_ip() {
+    # Source network utilities
+    if [ -f "$CODESPACE_HOME/scripts/modules/network/network-utils.sh" ]; then
+        source "$CODESPACE_HOME/scripts/modules/network/network-utils.sh"
+    else
+        error "Network utilities module not found"
+        exit 1
+    fi
+    
+    # Source config manager
+    if [ -f "$CODESPACE_HOME/scripts/modules/storage/config-manager.sh" ]; then
+        source "$CODESPACE_HOME/scripts/modules/storage/config-manager.sh"
+    else
+        error "Config manager module not found"
+        exit 1
+    fi
+    
+    # Handle command line options
+    if [ $# -eq 0 ]; then
+        # Interactive mode
+        configure_ip_interactive
+    else
+        case "$1" in
+            --show|show)
+                show_detected_ips
+                ;;
+            --auto|-a|auto)
+                update_ip_config "--auto"
+                ;;
+            --public|-p|public)
+                update_ip_config "--public"
+                ;;
+            --localhost|-l|localhost)
+                update_ip_config "--localhost"
+                ;;
+            --ip|-i)
+                if [ -z "$2" ]; then
+                    error "IP address required"
+                    echo "Usage: mcs update-ip --ip <address>"
+                    exit 1
+                fi
+                update_ip_config "--ip" "$2"
+                ;;
+            *)
+                # Assume it's an IP address
+                if validate_ip_address "$1"; then
+                    update_ip_config "--ip" "$1"
+                else
+                    error "Invalid option or IP address: $1"
+                    echo ""
+                    echo "Usage: mcs update-ip [options]"
+                    echo ""
+                    echo "Options:"
+                    echo "  --show            Show current IP configuration"
+                    echo "  --auto, -a        Auto-detect local IP"
+                    echo "  --public, -p      Auto-detect public IP"
+                    echo "  --localhost, -l   Use localhost"
+                    echo "  --ip <address>    Set specific IP address"
+                    echo "  <address>         Set specific IP address (shorthand)"
+                    echo ""
+                    echo "Interactive mode: mcs update-ip"
+                    exit 1
+                fi
+                ;;
+        esac
+    fi
+    
+    # Update all existing codespace READMEs with new IP
+    info "Updating existing codespace configurations..."
+    local count=0
+    for codespace_dir in "$CODESPACES_DIR"/*/; do
+        if [ -d "$codespace_dir" ] && [ -f "$codespace_dir/.env" ]; then
+            local codespace_name=$(basename "$codespace_dir")
+            if update_codespace_urls "$codespace_dir"; then
+                ((count++))
+            fi
+        fi
+    done
+    
+    if [ $count -gt 0 ]; then
+        success "Updated $count codespace(s) with new IP configuration"
+    fi
+}
+
+# Update URLs in a specific codespace
+update_codespace_urls() {
+    local codespace_dir="$1"
+    local readme_file="$codespace_dir/README.md"
+    
+    if [ ! -f "$readme_file" ]; then
+        return 1
+    fi
+    
+    # Get the new IP
+    local new_ip=$(get_access_ip)
+    
+    # Update URLs in README - replace any http://[ip/hostname]:port pattern
+    sed -i.bak "s|http://[^:]*:\([0-9]*\)|http://${new_ip}:\1|g" "$readme_file"
+    rm -f "${readme_file}.bak"
+    
+    return 0
+}
+
 cmd_doctor() {
     printf "${tty_bold}Michael's Codespaces Doctor${tty_reset}\n"
     echo "─────────────────────────────"
@@ -551,6 +666,7 @@ ${tty_bold}Commands:${tty_reset}
   ${tty_cyan}info${tty_reset} <name>           Show detailed information about a codespace
   ${tty_cyan}status${tty_reset}                Show system and codespaces status
   ${tty_cyan}update${tty_reset}                Update Michael's Codespaces to latest version
+  ${tty_cyan}update-ip${tty_reset}             Configure IP address for accessing codespaces
   ${tty_cyan}cleanup${tty_reset}               Remove MCS but keep Docker/system packages (soft cleanup)
   ${tty_cyan}destroy${tty_reset}               Completely remove MCS and all dependencies (factory reset)
   ${tty_cyan}doctor${tty_reset}                Check system health and configuration
@@ -617,6 +733,10 @@ case "${1:-help}" in
         ;;
     update|upgrade)
         cmd_update
+        ;;
+    update-ip|ip)
+        shift
+        cmd_update_ip "$@"
         ;;
     cleanup|clean)
         cmd_cleanup

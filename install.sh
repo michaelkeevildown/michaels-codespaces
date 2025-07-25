@@ -174,6 +174,82 @@ main() {
         success "mcs command installed with completions"
     fi
     
+    # Configure IP address settings
+    info "Configuring IP address settings..."
+    if [ -f "$CODESPACE_HOME/scripts/modules/network/network-utils.sh" ] && \
+       [ -f "$CODESPACE_HOME/scripts/modules/storage/config-manager.sh" ]; then
+        source "$CODESPACE_HOME/scripts/modules/network/network-utils.sh"
+        source "$CODESPACE_HOME/scripts/modules/storage/config-manager.sh"
+        
+        # Initialize config
+        init_config
+        
+        # Detect and show available IPs
+        printf "\n"
+        info "Detected network configuration:"
+        local local_ip=$(detect_local_ip)
+        printf "  Local IP: %s\n" "$local_ip"
+        
+        # Ask user for preference
+        printf "\n"
+        printf "How would you like to access your codespaces?\n"
+        printf "  1) localhost (default - local access only)\n"
+        printf "  2) %s (LAN access)\n" "$local_ip"
+        printf "  3) Auto-detect public IP (internet access)\n"
+        printf "  4) Enter custom IP/hostname\n"
+        printf "\n"
+        
+        if [ -z "$NONINTERACTIVE" ]; then
+            read -p "Choice [1-4]: " ip_choice
+            
+            case "$ip_choice" in
+                2)
+                    set_ip_mode "auto"
+                    set_host_ip "$local_ip"
+                    success "Configured to use local IP: $local_ip"
+                    ;;
+                3)
+                    info "Detecting public IP..."
+                    local public_ip=$(detect_public_ip)
+                    if [ -n "$public_ip" ]; then
+                        set_ip_mode "public"
+                        set_host_ip "$public_ip"
+                        success "Configured to use public IP: $public_ip"
+                    else
+                        warning "Could not detect public IP, using local IP"
+                        set_ip_mode "auto"
+                        set_host_ip "$local_ip"
+                    fi
+                    ;;
+                4)
+                    read -p "Enter IP address or hostname: " custom_ip
+                    if validate_ip_address "$custom_ip"; then
+                        set_ip_mode "manual"
+                        set_host_ip "$custom_ip"
+                        success "Configured to use: $custom_ip"
+                    else
+                        warning "Invalid IP/hostname, using localhost"
+                        set_ip_mode "localhost"
+                        set_host_ip "localhost"
+                    fi
+                    ;;
+                *)
+                    set_ip_mode "localhost"
+                    set_host_ip "localhost"
+                    info "Using default: localhost"
+                    ;;
+            esac
+        else
+            # Non-interactive mode - use localhost
+            set_ip_mode "localhost"
+            set_host_ip "localhost"
+            info "Non-interactive mode: using localhost"
+        fi
+        
+        printf "\n"
+        info "You can change this later with: mcs update-ip"
+    fi
+    
     # Success message
     printf "\n"
     success "🎉 Michael's Codespaces installed successfully!"

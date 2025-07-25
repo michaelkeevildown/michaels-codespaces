@@ -15,6 +15,13 @@ create_codespace_readme() {
     
     local vs_code_port=$(echo "$ports" | cut -d',' -f1 | cut -d':' -f1)
     
+    # Source network utilities to get configured IP
+    local access_ip="localhost"
+    if [ -f "$HOME/codespaces/scripts/modules/network/network-utils.sh" ]; then
+        source "$HOME/codespaces/scripts/modules/network/network-utils.sh"
+        access_ip=$(get_access_ip 2>/dev/null || echo "localhost")
+    fi
+    
     cat > "$codespace_dir/README.md" << EOF
 # $safe_name Codespace
 
@@ -25,7 +32,7 @@ create_codespace_readme() {
 mcs start $safe_name
 
 # Access VS Code
-open http://localhost:$vs_code_port
+open http://$access_ip:$vs_code_port
 Password: $password
 
 # Stop codespace
@@ -255,13 +262,20 @@ display_codespace_success() {
     
     local vs_code_port=$(echo "$ports" | cut -d',' -f1 | cut -d':' -f1)
     
+    # Source network utilities to get configured IP
+    local access_url="http://localhost:$vs_code_port"
+    if [ -f "$HOME/codespaces/scripts/modules/network/network-utils.sh" ]; then
+        source "$HOME/codespaces/scripts/modules/network/network-utils.sh"
+        access_url=$(get_access_url "$vs_code_port" 2>/dev/null || echo "http://localhost:$vs_code_port")
+    fi
+    
     echo ""
     echo_success "🎉 Codespace created successfully!"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "📦 Codespace: $safe_name"
-    echo "🌐 VS Code URL: http://localhost:$vs_code_port"
+    echo "🌐 VS Code URL: $access_url"
     echo "🔑 Password: $password"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
