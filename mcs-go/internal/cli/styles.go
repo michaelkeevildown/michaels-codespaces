@@ -11,4 +11,5 @@ var (
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	urlStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Underline(true)
 	sectionStyle = lipgloss.NewStyle().Bold(true).Underline(true)
+	boldStyle    = lipgloss.NewStyle().Bold(true)
 )

@@ -3,14 +3,19 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // SetupCommand creates the 'setup' command
@@ -133,9 +138,7 @@ func checkAndInstallDependencies() error {
 	if !commandExists("docker") {
 		fmt.Println(warningStyle.Render("Docker not found"))
 		if runtime.GOOS == "linux" {
-			fmt.Print("Would you like to install Docker? [Y/n] ")
-			os.Stdout.Sync() // Flush output before reading input
-			if getUserConfirmation() {
+			if getUserConfirmation("Would you like to install Docker? [Y/n]") {
 				if err := installDockerLinux(); err != nil {
 					return fmt.Errorf("failed to install Docker: %w", err)
 				}
@@ -186,58 +189,136 @@ func configureGitHub() error {
 	if _, err := os.Stat(tokenFile); err == nil {
 		// Try to validate existing token
 		if token, err := os.ReadFile(tokenFile); err == nil && len(token) > 0 {
-			fmt.Println(successStyle.Render("✓ GitHub token already configured"))
-			return nil
+			// Verify it works
+			if username := verifyGitHubToken(string(token)); username != "" {
+				fmt.Println(successStyle.Render("✓ GitHub token already configured"))
+				fmt.Printf("%s  Authenticated as: %s%s%s\n", infoStyle.Render("ℹ"), boldStyle.Render(""), username, "")
+				return nil
+			}
 		}
 	}
 
 	// Check environment variable
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		fmt.Println("Using GitHub token from environment variable...")
-		if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
-			return err
+		token = strings.TrimSpace(token)
+		if username := verifyGitHubToken(token); username != "" {
+			if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
+				return err
+			}
+			fmt.Println(successStyle.Render("✓ GitHub token saved"))
+			fmt.Printf("%s  Authenticated as: %s%s%s\n", infoStyle.Render("ℹ"), boldStyle.Render(""), username, "")
+			return nil
 		}
-		fmt.Println(successStyle.Render("✓ GitHub token saved"))
-		return nil
 	}
 
-	// Interactive setup
+	// Interactive setup with box
 	fmt.Println()
-	fmt.Println("To create codespaces, you need a GitHub Personal Access Token.")
+	fmt.Println(strings.Repeat("═", 50))
+	fmt.Println(headerStyle.Render("GitHub Personal Access Token Setup"))
+	fmt.Println(strings.Repeat("═", 50))
 	fmt.Println()
-	fmt.Println("Steps:")
-	fmt.Println("1. Open: " + urlStyle.Render("https://github.com/settings/tokens/new"))
-	fmt.Println("2. Set a note: 'MCS - " + getHostname() + "'")
-	fmt.Println("3. Select scopes:")
-	fmt.Println("   ✓ repo (Full control of private repositories)")
-	fmt.Println("   ✓ workflow (Update GitHub Action workflows)")
-	fmt.Println("   ✓ write:packages (Upload packages)")
-	fmt.Println("4. Click 'Generate token' and copy it")
+	fmt.Println("To create codespaces, you need a GitHub token.")
 	fmt.Println()
-	fmt.Print("Paste your token (or press Enter to skip): ")
-	os.Stdout.Sync() // Flush output before reading input
+	fmt.Println(boldStyle.Render("Quick Setup:"))
+	fmt.Println()
+	fmt.Println("1. " + infoStyle.Render("Open this URL:"))
+	fmt.Println("   " + urlStyle.Render("https://github.com/settings/tokens/new"))
+	fmt.Println()
+	fmt.Println("2. " + infoStyle.Render("Configure token:"))
+	fmt.Println("   • " + boldStyle.Render("Note:") + " MCS - " + getHostname())
+	fmt.Println("   • " + boldStyle.Render("Expiration:") + " 90 days (recommended)")
+	fmt.Println()
+	fmt.Println("   " + boldStyle.Render("Select scopes - Check these boxes:"))
+	fmt.Println("   ✓ " + boldStyle.Render("repo") + " (Full control of private repositories)")
+	fmt.Println("   ✓ " + boldStyle.Render("workflow") + " (Update GitHub Action workflows)")
+	fmt.Println("   ✓ " + boldStyle.Render("write:packages") + " (Upload packages to GitHub Package Registry)")
+	fmt.Println()
+	fmt.Println("3. " + infoStyle.Render("Generate & copy token") + " (starts with ghp_)")
+	fmt.Println(strings.Repeat("═", 50))
+	fmt.Println()
 
-	reader := bufio.NewReader(os.Stdin)
-	token, _ := reader.ReadString('\n')
-	token = strings.TrimSpace(token)
+	// Continuous loop until valid token or explicit skip
+	for {
+		fmt.Println(boldStyle.Render("Ready to paste your token?"))
+		fmt.Println("• Make sure you checked: repo, workflow, write:packages")
+		fmt.Println("• Token should start with 'ghp_' and be 40 characters long")
+		fmt.Println()
+		fmt.Println(boldStyle.Render("Paste your GitHub token:"))
+		fmt.Println("Tip: The token will be hidden as you type (like a password)")
+		fmt.Print("> ")
+		os.Stdout.Sync()
 
-	if token == "" {
-		fmt.Println(warningStyle.Render("Skipping GitHub configuration"))
-		return nil
+		// Read password-style (hidden input)
+		token := readHiddenInput()
+		
+		// Handle empty input
+		if token == "" {
+			fmt.Println()
+			fmt.Println(warningStyle.Render("Token is required for creating codespaces."))
+			fmt.Println()
+			fmt.Println("If you haven't created your token yet:")
+			fmt.Println("1. Open: " + urlStyle.Render("https://github.com/settings/tokens/new"))
+			fmt.Println("2. Check the 3 scopes mentioned above")
+			fmt.Println("3. Click 'Generate token' and copy it")
+			fmt.Println()
+			fmt.Print("Do you want to skip token setup for now? [y/N] ")
+			os.Stdout.Sync()
+			
+			if getUserConfirmation("Do you want to skip token setup for now? [y/N]") {
+				fmt.Println(infoStyle.Render("Skipping token setup. You'll need to set it before creating codespaces."))
+				return nil
+			} else {
+				fmt.Println("Let's try again...")
+				fmt.Println()
+				continue
+			}
+		}
+
+		// Show masked token
+		if len(token) >= 10 {
+			masked := fmt.Sprintf("%s%s%s", token[:7], strings.Repeat("*", 32), token[len(token)-3:])
+			fmt.Println()
+			fmt.Println(successStyle.Render("✓") + " Token captured: " + masked)
+			fmt.Printf("  Length: %d characters\n", len(token))
+		}
+
+		// Validate token format
+		if !strings.HasPrefix(token, "ghp_") || len(token) != 40 {
+			fmt.Println()
+			fmt.Println(errorStyle.Render("Invalid token format. GitHub tokens start with 'ghp_' followed by 36 characters."))
+			fmt.Println(infoStyle.Render("Example: ghp_A1b2C3d4E5f6G7h8I9j0K1L2M3N4O5P6Q7R8"))
+			fmt.Println()
+			continue
+		}
+
+		// Save token
+		if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
+			fmt.Println(errorStyle.Render("Failed to save token: " + err.Error()))
+			continue
+		}
+
+		fmt.Println(successStyle.Render("✓ GitHub token saved successfully!"))
+		
+		// Verify token
+		fmt.Println(infoStyle.Render("Verifying token with GitHub..."))
+		if username := verifyGitHubToken(token); username != "" {
+			fmt.Println(successStyle.Render("✓ Token verified - authentication working!"))
+			fmt.Printf("%s  Authenticated as: %s%s%s\n", infoStyle.Render("ℹ"), boldStyle.Render(""), username, "")
+			return nil
+		} else {
+			// Token verification failed
+			fmt.Println(errorStyle.Render("Token verification failed"))
+			os.Remove(tokenFile) // Remove invalid token
+			fmt.Println()
+			fmt.Print("Retry with a different token? [Y/n] ")
+			if !getUserConfirmation("Retry with a different token? [Y/n]") {
+				fmt.Println(warningStyle.Render("Continuing without GitHub authentication"))
+				return nil
+			}
+			continue
+		}
 	}
-
-	// Validate token format
-	if !strings.HasPrefix(token, "ghp_") || len(token) != 40 {
-		return fmt.Errorf("invalid token format")
-	}
-
-	// Save token
-	if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
-		return err
-	}
-
-	fmt.Println(successStyle.Render("✓ GitHub token saved"))
-	return nil
 }
 
 func setupShellIntegration() error {
@@ -348,14 +429,35 @@ func commandExists(cmd string) bool {
 	return err == nil
 }
 
-func getUserConfirmation() bool {
+func getUserConfirmation(prompt string) bool {
 	// Ensure output is flushed before reading input
 	os.Stdout.Sync()
 	
 	reader := bufio.NewReader(os.Stdin)
 	response, _ := reader.ReadString('\n')
 	response = strings.ToLower(strings.TrimSpace(response))
-	return response == "y" || response == "yes" || response == ""
+	
+	// Check if user wants to proceed (default is NO for skip prompts)
+	var result bool
+	if strings.Contains(prompt, "[y/N]") {
+		// Default is NO
+		result = response == "y" || response == "yes"
+	} else {
+		// Default is YES for other prompts
+		result = response == "y" || response == "yes" || response == ""
+	}
+	
+	// Simply display what was selected on the same line
+	// This fixes the cursor positioning issue
+	if response == "" {
+		if strings.Contains(prompt, "[y/N]") {
+			fmt.Println("n") // Show default NO
+		} else {
+			fmt.Println("y") // Show default YES
+		}
+	}
+	
+	return result
 }
 
 func getHostname() string {
@@ -366,6 +468,81 @@ func getHostname() string {
 func pathContains(dir string) bool {
 	path := os.Getenv("PATH")
 	return strings.Contains(path, dir)
+}
+
+// readHiddenInput reads password-style input (hidden from terminal)
+func readHiddenInput() string {
+	// Check if stdin is a terminal
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		// Not a terminal, read normally
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		return strings.TrimSpace(input)
+	}
+
+	// Read password-style
+	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		// Fallback to normal read
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		return strings.TrimSpace(input)
+	}
+	
+	return strings.TrimSpace(string(bytePassword))
+}
+
+// verifyGitHubToken verifies a GitHub token and returns the username if valid
+func verifyGitHubToken(token string) string {
+	token = strings.TrimSpace(token)
+	
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	
+	// Create request
+	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	if err != nil {
+		return ""
+	}
+	
+	// Set headers
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	
+	// Make request
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	
+	// Check status code
+	if resp.StatusCode != 200 {
+		return ""
+	}
+	
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	
+	// Extract username from JSON response
+	// Simple extraction without importing encoding/json
+	bodyStr := string(body)
+	loginStart := strings.Index(bodyStr, `"login":"`)
+	if loginStart == -1 {
+		return ""
+	}
+	loginStart += len(`"login":"`)
+	loginEnd := strings.Index(bodyStr[loginStart:], `"`)
+	if loginEnd == -1 {
+		return ""
+	}
+	
+	return bodyStr[loginStart : loginStart+loginEnd]
 }
 
 func installDockerLinux() error {

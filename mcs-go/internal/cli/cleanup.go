@@ -32,10 +32,16 @@ This will:
 				fmt.Println("   Your codespaces will be preserved and containers will keep running.")
 				fmt.Println()
 				fmt.Print("Are you sure? [y/N] ")
+				os.Stdout.Sync() // Ensure prompt is displayed
 
 				reader := bufio.NewReader(os.Stdin)
 				response, _ := reader.ReadString('\n')
 				response = strings.TrimSpace(strings.ToLower(response))
+				
+				// Show what was selected to fix cursor positioning
+				if response == "" {
+					fmt.Println("n") // Default is NO
+				}
 				
 				if response != "y" && response != "yes" {
 					fmt.Println("Cancelled.")

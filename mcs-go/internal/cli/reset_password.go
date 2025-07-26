@@ -41,10 +41,18 @@ func ResetPasswordCommand() *cobra.Command {
 			if !force {
 				fmt.Printf("⚠️  This will change the password for codespace '%s'.\n", name)
 				fmt.Print("Are you sure? [y/N] ")
+				os.Stdout.Sync() // Ensure prompt is displayed
 				
 				var response string
 				fmt.Scanln(&response)
-				if response != "y" && response != "Y" {
+				response = strings.ToLower(strings.TrimSpace(response))
+				
+				// Show what was selected to fix cursor positioning
+				if response == "" {
+					fmt.Println("n") // Default is NO
+				}
+				
+				if response != "y" && response != "yes" {
 					fmt.Println("Cancelled.")
 					return nil
 				}

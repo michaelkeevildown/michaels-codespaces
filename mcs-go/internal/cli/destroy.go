@@ -60,10 +60,16 @@ Use 'mcs cleanup' for a soft removal that preserves codespaces.`,
 				fmt.Println(destroyWarningStyle.Render("This action cannot be undone!"))
 				fmt.Println()
 				fmt.Print("Type 'destroy' to confirm: ")
+				os.Stdout.Sync() // Ensure prompt is displayed
 
 				reader := bufio.NewReader(os.Stdin)
 				response, _ := reader.ReadString('\n')
 				response = strings.TrimSpace(response)
+				
+				// Show what was typed to fix cursor positioning
+				if response == "" {
+					fmt.Println() // Just move to next line if nothing typed
+				}
 				
 				if response != "destroy" {
 					fmt.Println("Cancelled.")
