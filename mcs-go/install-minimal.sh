@@ -102,4 +102,15 @@ echo ""
 export PATH="$MCS_HOME/bin:$PATH"
 
 # Run MCS setup
-exec "$MCS_HOME/bin/mcs" setup --bootstrap
+"$MCS_HOME/bin/mcs" setup --bootstrap
+
+# The PATH is already exported for this session
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo -e "${GREEN}✨ MCS is installed and ready to use in this terminal!${NC}"
+echo ""
+echo "To use MCS in new terminals, run:"
+echo "  source ~/.bashrc  (or source ~/.zshrc for zsh)"
+echo ""
+echo "Or simply start a new terminal session."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

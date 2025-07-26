@@ -84,10 +84,21 @@ func runSetup(bootstrap, skipDeps, skipGitHub bool) error {
 	fmt.Println()
 	fmt.Println(successStyle.Render("✅ MCS setup complete!"))
 	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Println("  1. Reload your shell or run: source ~/.bashrc")
-	fmt.Println("  2. Verify setup: mcs doctor")
-	fmt.Println("  3. Create a codespace: mcs create my-project")
+	
+	// Note about PATH being already set by installer
+	if bootstrap {
+		fmt.Println("MCS is now available in your PATH!")
+		fmt.Println()
+		fmt.Println("You can now run:")
+		fmt.Println("  • mcs doctor    - Verify your setup")
+		fmt.Println("  • mcs create    - Create a new codespace")
+		fmt.Println("  • mcs --help    - See all available commands")
+	} else {
+		fmt.Println("Next steps:")
+		fmt.Println("  1. Reload your shell or run: source ~/.bashrc")
+		fmt.Println("  2. Verify setup: mcs doctor")
+		fmt.Println("  3. Create a codespace: mcs create my-project")
+	}
 	fmt.Println()
 
 	return nil
