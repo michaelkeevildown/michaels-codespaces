@@ -586,17 +586,67 @@ func installDockerLinux() error {
 
 	// Add Docker's GPG key
 	progress.Update("Adding Docker GPG key")
-	cmds := [][]string{
-		{"sudo", "mkdir", "-p", "/etc/apt/keyrings"},
-		{"sh", "-c", "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg"},
+	
+	// Create keyrings directory
+	cmd = exec.Command("sudo", "mkdir", "-p", "/etc/apt/keyrings")
+	if err := cmd.Run(); err != nil {
+		progress.Fail("Failed to create keyrings directory")
+		return err
 	}
 
-	for _, args := range cmds {
-		cmd = exec.Command(args[0], args[1:]...)
-		if err := cmd.Run(); err != nil {
-			progress.Fail("Failed to add Docker GPG key")
-			return err
+	// Download GPG key with timeout and retry
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if attempt > 1 {
+			progress.Update(fmt.Sprintf("Adding Docker GPG key (attempt %d/3)", attempt))
+			time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
 		}
+
+		// Try to download GPG key with timeout
+		cmd = exec.Command("sh", "-c", 
+			"curl -fsSL --max-time 30 --connect-timeout 10 https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg")
+		
+		// Capture stderr for better error reporting
+		var stderr strings.Builder
+		cmd.Stderr = &stderr
+		
+		if err := cmd.Run(); err != nil {
+			lastErr = fmt.Errorf("attempt %d failed: %v (stderr: %s)", attempt, err, stderr.String())
+			
+			// If curl failed, try alternative method
+			if attempt < 3 && strings.Contains(stderr.String(), "curl") {
+				progress.Update(fmt.Sprintf("Trying alternative download method (attempt %d/3)", attempt))
+				
+				// Download to temp file first
+				tempFile := "/tmp/docker-gpg-key.asc"
+				altCmd := exec.Command("sudo", "sh", "-c",
+					fmt.Sprintf("curl -fsSL --max-time 30 --connect-timeout 10 -o %s https://download.docker.com/linux/ubuntu/gpg && cat %s | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && rm -f %s", 
+						tempFile, tempFile, tempFile))
+				
+				var altStderr strings.Builder
+				altCmd.Stderr = &altStderr
+				
+				if err := altCmd.Run(); err == nil {
+					// Alternative method succeeded
+					break
+				}
+				lastErr = fmt.Errorf("alternative method failed: %v (stderr: %s)", err, altStderr.String())
+			}
+			continue
+		}
+		// Success
+		lastErr = nil
+		break
+	}
+
+	if lastErr != nil {
+		progress.Fail("Failed to add Docker GPG key after 3 attempts")
+		fmt.Println(errorStyle.Render("Error details: " + lastErr.Error()))
+		fmt.Println(infoStyle.Render("Troubleshooting tips:"))
+		fmt.Println("  • Check your internet connection")
+		fmt.Println("  • Try running: curl -fsSL https://download.docker.com/linux/ubuntu/gpg")
+		fmt.Println("  • Ensure you can access download.docker.com")
+		return lastErr
 	}
 
 	// Add Docker repository
