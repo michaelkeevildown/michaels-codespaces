@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -18,7 +19,6 @@ import (
 // CreateCommand creates the 'create' command
 func CreateCommand() *cobra.Command {
 	var (
-		name         string
 		noStart      bool
 		skipSelector bool
 	)
@@ -32,15 +32,20 @@ The repository can be specified as:
   - Full URL: https://github.com/user/repo
   - SSH URL: git@github.com:user/repo.git
   - Short form: user/repo (assumes GitHub)
-  - Local path: . or ./path/to/repo`,
+  - Local path: . or ./path/to/repo
+
+Codespace names are automatically generated from the repository owner and name.
+If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 		Example: `  # Create from GitHub repository
   mcs create facebook/react
+  # Creates: facebook-react
+  
+  # Create from SSH URL
+  mcs create git@github.com:michaelkeevildown/michaels-codespaces.git
+  # Creates: michaelkeevildown-michaels-codespaces
   
   # Create from current directory
-  mcs create .
-  
-  # Create with custom name
-  mcs create torvalds/linux --name my-kernel-dev`,
+  mcs create .`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -61,13 +66,14 @@ The repository can be specified as:
 			}
 			progress.Success("Repository validated")
 
-			// Generate name if not provided
-			if name == "" {
-				name = utils.GenerateFunName(repo.Name)
+			// Generate unique name with collision detection
+			baseDir := filepath.Join(utils.GetHomeDir(), "codespaces")
+			checkExists := func(name string) bool {
+				_, err := os.Stat(filepath.Join(baseDir, name))
+				return !os.IsNotExist(err)
 			}
 			
-			// Ensure name is valid
-			name = utils.SanitizeName(name)
+			name := utils.GenerateUniqueCodespaceName(repo.Owner, repo.Name, checkExists)
 
 			fmt.Println()
 			fmt.Printf("📦 Creating codespace: %s\n", infoStyle.Render(name))
@@ -109,7 +115,7 @@ The repository can be specified as:
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", "Custom name for the codespace")
+	// Removed --name flag as names are now auto-generated from repository
 	cmd.Flags().BoolVar(&noStart, "no-start", false, "Don't start the codespace after creation")
 	cmd.Flags().BoolVar(&skipSelector, "skip-selector", false, "Skip component selection (use defaults)")
 
@@ -178,6 +184,9 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 		progress.Success("Services started")
 	}
 
+	// Generate secure password
+	password := utils.GenerateSecurePassword()
+	
 	// Create codespace object
 	cs := &codespace.Codespace{
 		Name:       opts.Name,
@@ -187,6 +196,8 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 		CreatedAt:  time.Now(),
 		VSCodeURL:  fmt.Sprintf("http://localhost:8080"),
 		AppURL:     fmt.Sprintf("http://localhost:3000"),
+		Password:   password,
+		VSCodePort: 8080,
 	}
 
 	return cs, nil
@@ -197,30 +208,32 @@ func showSuccess(cs *codespace.Codespace) {
 	fmt.Println(successStyle.Render("✨ Codespace created successfully!"))
 	fmt.Println()
 	
-	// Create a nice box for the URLs
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("42")).
-		Padding(1, 2)
-
-	content := fmt.Sprintf(
-		"📍 Name: %s\n"+
-		"🔗 VS Code: %s\n"+
-		"🌐 App: %s\n"+
-		"📂 Path: %s",
-		cs.Name,
-		urlStyle.Render(cs.VSCodeURL),
-		urlStyle.Render(cs.AppURL),
-		cs.Path,
-	)
-
-	fmt.Println(boxStyle.Render(content))
+	// Create the perfect box format
+	boxTop := "╭─────────────────────────────────────────────╮"
+	boxMid := "│                                             │"
+	boxBot := "╰─────────────────────────────────────────────╯"
+	
+	// Format content with proper spacing
+	nameLine := fmt.Sprintf("│  📍 Name: %-33s │", cs.Name)
+	vscLine := fmt.Sprintf("│  🔗 VS Code: %-30s │", cs.VSCodeURL)
+	pwdLine := fmt.Sprintf("│  🔑 Password: %-29s │", cs.Password)
+	pathLine := fmt.Sprintf("│  📂 Path: %-33s │", cs.Path)
+	
+	// Print the box
+	fmt.Println(boxTop)
+	fmt.Println(boxMid)
+	fmt.Println(nameLine)
+	fmt.Println(vscLine)
+	fmt.Println(pwdLine)
+	fmt.Println(pathLine)
+	fmt.Println(boxMid)
+	fmt.Println(boxBot)
 	fmt.Println()
 	
 	// Show helpful tips
-	fmt.Println(infoStyle.Render("💡 Tips:"))
-	fmt.Printf("  • Open VS Code: %s\n", infoStyle.Render(fmt.Sprintf("mcs open %s", cs.Name)))
-	fmt.Printf("  • View logs: %s\n", infoStyle.Render(fmt.Sprintf("mcs logs %s", cs.Name)))
-	fmt.Printf("  • Stop when done: %s\n", infoStyle.Render(fmt.Sprintf("mcs stop %s", cs.Name)))
+	fmt.Println("💡 Tips:")
+	fmt.Printf("  • Open VS Code: mcs open %s\n", cs.Name)
+	fmt.Printf("  • View logs: mcs logs %s\n", cs.Name)
+	fmt.Printf("  • Stop when done: mcs stop %s\n", cs.Name)
 	fmt.Println()
 }
