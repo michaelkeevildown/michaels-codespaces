@@ -33,8 +33,8 @@ func (p *Progress) Start(task string) {
 	p.currentTask = task
 	p.frame = 0
 	
-	// Clear the line and show initial state
-	fmt.Printf("\r%s %s", spinnerStyle.Render(spinnerFrames[0]), task)
+	// Clear the entire line and show initial state
+	fmt.Printf("\r\033[K%s %s", spinnerStyle.Render(spinnerFrames[0]), task)
 	
 	// Start spinner in background
 	go func() {
@@ -45,7 +45,7 @@ func (p *Progress) Start(task string) {
 			select {
 			case <-ticker.C:
 				p.frame = (p.frame + 1) % len(spinnerFrames)
-				fmt.Printf("\r%s %s", spinnerStyle.Render(spinnerFrames[p.frame]), p.currentTask)
+				fmt.Printf("\r\033[K%s %s", spinnerStyle.Render(spinnerFrames[p.frame]), p.currentTask)
 			case <-p.done:
 				return
 			}
@@ -57,18 +57,18 @@ func (p *Progress) Start(task string) {
 func (p *Progress) Success(message string) {
 	p.done <- true
 	time.Sleep(50 * time.Millisecond) // Brief pause to ensure spinner stops
-	fmt.Printf("\r%s %s\n", successMark, message)
+	fmt.Printf("\r\033[K%s %s\n", successMark, message)
 }
 
 // Fail marks the current task as failed
 func (p *Progress) Fail(message string) {
 	p.done <- true
 	time.Sleep(50 * time.Millisecond) // Brief pause to ensure spinner stops
-	fmt.Printf("\r%s %s\n", failMark, message)
+	fmt.Printf("\r\033[K%s %s\n", failMark, message)
 }
 
 // Update updates the current task message
 func (p *Progress) Update(task string) {
 	p.currentTask = task
-	fmt.Printf("\r%s %s", spinnerStyle.Render(spinnerFrames[p.frame]), task)
+	fmt.Printf("\r\033[K%s %s", spinnerStyle.Render(spinnerFrames[p.frame]), task)
 }

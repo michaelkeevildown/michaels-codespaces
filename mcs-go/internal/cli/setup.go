@@ -139,6 +139,7 @@ func checkAndInstallDependencies() error {
 		fmt.Println(warningStyle.Render("Docker not found"))
 		if runtime.GOOS == "linux" {
 			if getUserConfirmation("Would you like to install Docker? [Y/n]") {
+				fmt.Println() // Add newline before progress starts
 				if err := installDockerLinux(); err != nil {
 					return fmt.Errorf("failed to install Docker: %w", err)
 				}
@@ -430,8 +431,9 @@ func commandExists(cmd string) bool {
 }
 
 func getUserConfirmation(prompt string) bool {
-	// Ensure output is flushed before reading input
-	os.Stdout.Sync()
+	// Display the prompt first!
+	fmt.Print(prompt + " ")
+	os.Stdout.Sync() // Ensure prompt is displayed before reading input
 	
 	reader := bufio.NewReader(os.Stdin)
 	response, _ := reader.ReadString('\n')
