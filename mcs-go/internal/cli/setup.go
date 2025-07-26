@@ -134,6 +134,7 @@ func checkAndInstallDependencies() error {
 		fmt.Println(warningStyle.Render("Docker not found"))
 		if runtime.GOOS == "linux" {
 			fmt.Print("Would you like to install Docker? [Y/n] ")
+			os.Stdout.Sync() // Flush output before reading input
 			if getUserConfirmation() {
 				if err := installDockerLinux(); err != nil {
 					return fmt.Errorf("failed to install Docker: %w", err)
@@ -214,6 +215,7 @@ func configureGitHub() error {
 	fmt.Println("4. Click 'Generate token' and copy it")
 	fmt.Println()
 	fmt.Print("Paste your token (or press Enter to skip): ")
+	os.Stdout.Sync() // Flush output before reading input
 
 	reader := bufio.NewReader(os.Stdin)
 	token, _ := reader.ReadString('\n')
@@ -347,6 +349,9 @@ func commandExists(cmd string) bool {
 }
 
 func getUserConfirmation() bool {
+	// Ensure output is flushed before reading input
+	os.Stdout.Sync()
+	
 	reader := bufio.NewReader(os.Stdin)
 	response, _ := reader.ReadString('\n')
 	response = strings.ToLower(strings.TrimSpace(response))
