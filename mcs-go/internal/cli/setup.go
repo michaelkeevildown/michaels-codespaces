@@ -578,7 +578,7 @@ func installDockerLinux() error {
 	}
 
 	cmd = exec.Command("sudo", "apt-get", "install", "-y", 
-		"ca-certificates", "curl", "gnupg", "lsb-release")
+		"ca-certificates", "curl", "gnupg", "lsb-release", "gpg")
 	if err := cmd.Run(); err != nil {
 		progress.Fail("Failed to install prerequisites")
 		return err
@@ -603,35 +603,54 @@ func installDockerLinux() error {
 		}
 
 		// Try to download GPG key with timeout
-		cmd = exec.Command("sh", "-c", 
-			"curl -fsSL --max-time 30 --connect-timeout 10 https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg")
+		// First, let's download the key to a temp file to separate curl and gpg operations
+		tempFile := "/tmp/docker-gpg-key.asc"
 		
-		// Capture stderr for better error reporting
-		var stderr strings.Builder
-		cmd.Stderr = &stderr
+		// Download the GPG key
+		curlCmd := exec.Command("curl", "-fsSL", "--max-time", "30", "--connect-timeout", "10",
+			"-o", tempFile, "https://download.docker.com/linux/ubuntu/gpg")
 		
-		if err := cmd.Run(); err != nil {
-			lastErr = fmt.Errorf("attempt %d failed: %v (stderr: %s)", attempt, err, stderr.String())
-			
-			// If curl failed, try alternative method
-			if attempt < 3 && strings.Contains(stderr.String(), "curl") {
-				progress.Update(fmt.Sprintf("Trying alternative download method (attempt %d/3)", attempt))
-				
-				// Download to temp file first
-				tempFile := "/tmp/docker-gpg-key.asc"
-				altCmd := exec.Command("sudo", "sh", "-c",
-					fmt.Sprintf("curl -fsSL --max-time 30 --connect-timeout 10 -o %s https://download.docker.com/linux/ubuntu/gpg && cat %s | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && rm -f %s", 
-						tempFile, tempFile, tempFile))
-				
-				var altStderr strings.Builder
-				altCmd.Stderr = &altStderr
-				
-				if err := altCmd.Run(); err == nil {
-					// Alternative method succeeded
-					break
-				}
-				lastErr = fmt.Errorf("alternative method failed: %v (stderr: %s)", err, altStderr.String())
+		var curlStderr strings.Builder
+		curlCmd.Stderr = &curlStderr
+		
+		if err := curlCmd.Run(); err != nil {
+			lastErr = fmt.Errorf("attempt %d: curl failed: %v (stderr: %s)", attempt, err, curlStderr.String())
+			// Clean up temp file if it exists
+			os.Remove(tempFile)
+			continue
+		}
+		
+		// Check if file was downloaded
+		if _, err := os.Stat(tempFile); err != nil {
+			lastErr = fmt.Errorf("attempt %d: downloaded file not found: %v", attempt, err)
+			continue
+		}
+		
+		// Now process the GPG key
+		// Use gpg with explicit flags to avoid hanging
+		gpgCmd := exec.Command("sudo", "sh", "-c",
+			fmt.Sprintf("gpg --batch --yes --dearmor < %s > /etc/apt/keyrings/docker.gpg", tempFile))
+		
+		var gpgStderr strings.Builder
+		gpgCmd.Stderr = &gpgStderr
+		
+		if err := gpgCmd.Run(); err != nil {
+			// If gpg fails, try using cp directly (key might already be in binary format)
+			cpCmd := exec.Command("sudo", "cp", tempFile, "/etc/apt/keyrings/docker.gpg")
+			if cpErr := cpCmd.Run(); cpErr != nil {
+				lastErr = fmt.Errorf("attempt %d: gpg processing failed: %v (stderr: %s), direct copy also failed: %v", 
+					attempt, err, gpgStderr.String(), cpErr)
+				os.Remove(tempFile)
+				continue
 			}
+		}
+		
+		// Clean up temp file
+		os.Remove(tempFile)
+		
+		// Verify the key was created
+		if _, err := os.Stat("/etc/apt/keyrings/docker.gpg"); err != nil {
+			lastErr = fmt.Errorf("attempt %d: GPG key file not created: %v", attempt, err)
 			continue
 		}
 		// Success
