@@ -435,7 +435,26 @@ func getUserConfirmation(prompt string) bool {
 	fmt.Print(prompt + " ")
 	os.Stdout.Sync() // Ensure prompt is displayed before reading input
 	
-	reader := bufio.NewReader(os.Stdin)
+	var reader *bufio.Reader
+	
+	// Check if stdin is a terminal
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		// stdin is not a terminal (e.g., piped input)
+		// Try to open /dev/tty directly to read from the actual terminal
+		tty, err := os.Open("/dev/tty")
+		if err != nil {
+			// Can't get user input in non-interactive mode
+			// Default to NO for safety (don't auto-install things)
+			fmt.Println("n (non-interactive mode)")
+			return false
+		}
+		defer tty.Close()
+		reader = bufio.NewReader(tty)
+	} else {
+		// Normal interactive mode
+		reader = bufio.NewReader(os.Stdin)
+	}
+	
 	response, _ := reader.ReadString('\n')
 	response = strings.ToLower(strings.TrimSpace(response))
 	
