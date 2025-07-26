@@ -493,19 +493,39 @@ func pathContains(dir string) bool {
 
 // readHiddenInput reads password-style input (hidden from terminal)
 func readHiddenInput() string {
+	var fd int
+	var ttyFile *os.File
+	
 	// Check if stdin is a terminal
 	if !term.IsTerminal(int(syscall.Stdin)) {
-		// Not a terminal, read normally
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		return strings.TrimSpace(input)
+		// stdin is not a terminal (e.g., piped input)
+		// Try to open /dev/tty directly to read from the actual terminal
+		var err error
+		ttyFile, err = os.Open("/dev/tty")
+		if err != nil {
+			// Can't get user input in non-interactive mode
+			fmt.Println()
+			fmt.Println(errorStyle.Render("Cannot read token in non-interactive mode"))
+			fmt.Println(infoStyle.Render("Please run the installer interactively or set GITHUB_TOKEN environment variable"))
+			return ""
+		}
+		defer ttyFile.Close()
+		fd = int(ttyFile.Fd())
+	} else {
+		// Normal interactive mode
+		fd = int(syscall.Stdin)
 	}
 
-	// Read password-style
-	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
+	// Read password-style from the appropriate file descriptor
+	bytePassword, err := term.ReadPassword(fd)
 	if err != nil {
-		// Fallback to normal read
-		reader := bufio.NewReader(os.Stdin)
+		// If password reading fails, try normal reading
+		var reader *bufio.Reader
+		if ttyFile != nil {
+			reader = bufio.NewReader(ttyFile)
+		} else {
+			reader = bufio.NewReader(os.Stdin)
+		}
 		input, _ := reader.ReadString('\n')
 		return strings.TrimSpace(input)
 	}
