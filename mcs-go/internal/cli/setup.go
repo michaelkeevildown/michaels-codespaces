@@ -133,7 +133,7 @@ func checkAndInstallDependencies() error {
 	if !commandExists("docker") {
 		fmt.Println(warningStyle.Render("Docker not found"))
 		if runtime.GOOS == "linux" {
-			fmt.Println("Would you like to install Docker? [Y/n] ")
+			fmt.Print("Would you like to install Docker? [Y/n] ")
 			if getUserConfirmation() {
 				if err := installDockerLinux(); err != nil {
 					return fmt.Errorf("failed to install Docker: %w", err)
