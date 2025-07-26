@@ -80,12 +80,30 @@ echo ""
 echo "📥 Cloning MCS from feature branch..."
 cd /tmp
 rm -rf mcs-test
-git clone -b feat/mcs-go-status-command https://github.com/michaelkeevildown/michaels-codespaces.git mcs-test
+
+# Set branch for the installer
+export MCS_BRANCH="feat/mcs-go-status-command"
+
+# If GITHUB_TOKEN is set, pass it through
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    echo "✅ GitHub token detected, will use for authentication"
+fi
+
+# Clone the repository
+if ! git clone -b "$MCS_BRANCH" https://github.com/michaelkeevildown/michaels-codespaces.git mcs-test 2>/dev/null; then
+    echo "❌ Failed to clone repository"
+    echo "⚠️  If this is a private repository, please provide a GitHub token:"
+    echo ""
+    echo "  export GITHUB_TOKEN='your-github-token'"
+    echo "  curl -fsSL <install-script-url> | bash"
+    echo ""
+    exit 1
+fi
 
 # Navigate to mcs-go directory
 cd mcs-test/mcs-go
 
-# Run the install script
+# Run the install script (it will use the GITHUB_TOKEN and MCS_BRANCH env vars)
 echo ""
 echo "🔨 Running MCS Go installer..."
 bash install.sh

@@ -37,7 +37,8 @@ error() {
 
 # Configuration
 MCS_HOME="${MCS_HOME:-$HOME/.mcs}"
-REPO_URL="${MCS_REPO_URL:-https://github.com/michaelkeevildown/mcs.git}"
+REPO_URL="${MCS_REPO_URL:-https://github.com/michaelkeevildown/michaels-codespaces.git}"
+BRANCH="${MCS_BRANCH:-main}"
 
 # Detect OS and architecture
 detect_platform() {
@@ -99,12 +100,34 @@ check_requirements() {
 
 # Clone or update repository
 clone_or_update_repo() {
+    # Check if we need authentication
+    local clone_url="$REPO_URL"
+    
+    # If GitHub token is provided, use it
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        info "Using GitHub token for authentication..."
+        # Extract repo path from URL
+        repo_path=$(echo "$REPO_URL" | sed 's|https://github.com/||')
+        clone_url="https://token:${GITHUB_TOKEN}@github.com/${repo_path}"
+    fi
+    
     if [ -d "$MCS_HOME/.git" ]; then
         info "Updating existing MCS installation..."
         cd "$MCS_HOME"
-        git pull origin main || {
+        
+        # Update remote URL if token is provided
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            git remote set-url origin "$clone_url" 2>/dev/null || true
+        fi
+        
+        git pull origin "$BRANCH" || {
             warning "Failed to update repository. Continuing with existing code..."
         }
+        
+        # Reset remote URL to remove token
+        if [ -n "${GITHUB_TOKEN:-}" ]; then
+            git remote set-url origin "$REPO_URL" 2>/dev/null || true
+        fi
     else
         info "Cloning MCS repository..."
         # Backup existing directory if it exists
@@ -113,10 +136,25 @@ clone_or_update_repo() {
             mv "$MCS_HOME" "${MCS_HOME}.backup.$(date +%Y%m%d_%H%M%S)"
         fi
         
-        git clone "$REPO_URL" "$MCS_HOME" || {
-            error "Failed to clone repository"
-            exit 1
-        }
+        # Clone with branch support
+        if git clone -b "$BRANCH" "$clone_url" "$MCS_HOME" 2>/dev/null; then
+            # Remove token from remote URL after successful clone
+            if [ -n "${GITHUB_TOKEN:-}" ]; then
+                cd "$MCS_HOME"
+                git remote set-url origin "$REPO_URL"
+            fi
+        else
+            # If clone fails, check if it's a public repo
+            warning "Clone failed. Trying without authentication..."
+            if ! git clone -b "$BRANCH" "$REPO_URL" "$MCS_HOME"; then
+                error "Failed to clone repository"
+                error ""
+                error "If this is a private repository, please set GITHUB_TOKEN:"
+                error "  export GITHUB_TOKEN='your-github-token'"
+                error "  curl -fsSL install-script-url | bash"
+                exit 1
+            fi
+        fi
     fi
 }
 
@@ -147,6 +185,12 @@ main() {
     echo ""
     echo "Installation philosophy: Build from source for full control"
     echo "Repository: $REPO_URL"
+    if [ -n "$BRANCH" ] && [ "$BRANCH" != "main" ]; then
+        echo "Branch: $BRANCH"
+    fi
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        echo "Authentication: Using provided GitHub token"
+    fi
     echo ""
     
     # Detect platform
