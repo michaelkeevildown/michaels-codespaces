@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -142,6 +143,7 @@ func NewSelector() Model {
 	l.Styles.Title = titleStyle
 	l.Styles.PaginationStyle = paginationStyle
 	l.Styles.HelpStyle = helpStyle
+	// Add space key help text
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(
@@ -166,33 +168,4 @@ func SelectComponents() ([]Component, error) {
 	return GetSelected(), nil
 }
 
-// Simple key binding helper
-type key struct{}
 
-func (k key) NewBinding(opts ...func(*keyBinding)) keyBinding {
-	kb := keyBinding{}
-	for _, opt := range opts {
-		opt(&kb)
-	}
-	return kb
-}
-
-func (k key) WithKeys(keys ...string) func(*keyBinding) {
-	return func(kb *keyBinding) {
-		kb.keys = keys
-	}
-}
-
-func (k key) WithHelp(key, desc string) func(*keyBinding) {
-	return func(kb *keyBinding) {
-		kb.help = []string{key, desc}
-	}
-}
-
-type keyBinding struct {
-	keys []string
-	help []string
-}
-
-func (kb keyBinding) Keys() []string      { return kb.keys }
-func (kb keyBinding) Help() (string, string) { return kb.help[0], kb.help[1] }

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -100,14 +101,14 @@ func performDestroy(keepDocker, skipBackup bool) error {
 	if err == nil {
 		progress.Update("Stopping all codespace containers")
 		
-		containers, err := dockerClient.ListContainers()
+		containers, err := dockerClient.ListContainers(context.Background(), "")
 		if err == nil {
 			for _, container := range containers {
 				// Only stop MCS containers
-				if strings.Contains(container.Names[0], "mcs-") || 
-				   strings.Contains(container.Image, "michaelkeevildown/claude-coder") {
-					if err := dockerClient.StopContainer(container.ID); err != nil {
-						fmt.Printf("Warning: Failed to stop container %s: %v\n", container.Names[0], err)
+				if strings.Contains(container.Name, "mcs-") || 
+				   strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
+					if err := dockerClient.StopContainer(context.Background(), container.ID); err != nil {
+						fmt.Printf("Warning: Failed to stop container %s: %v\n", container.Name, err)
 					}
 				}
 			}
@@ -168,7 +169,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 	}
 
 	for _, configFile := range shellConfigs {
-		if err := cleanShellConfig(configFile); err != nil {
+		if err := cleanShellConfigDestroy(configFile); err != nil {
 			fmt.Printf("Warning: Failed to clean %s: %v\n", configFile, err)
 		}
 	}
@@ -246,15 +247,15 @@ func createBackup() error {
 }
 
 func removeAllContainers(client *docker.Client) error {
-	containers, err := client.ListContainers()
+	containers, err := client.ListContainers(context.Background(), "")
 	if err != nil {
 		return err
 	}
 	
 	for _, container := range containers {
 		// Only remove MCS containers
-		if strings.Contains(container.Names[0], "mcs-") || 
-		   strings.Contains(container.Image, "michaelkeevildown/claude-coder") {
+		if strings.Contains(container.Name, "mcs-") || 
+		   strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
 			// Force remove
 			cmd := exec.Command("docker", "rm", "-f", container.ID)
 			if err := cmd.Run(); err != nil {
@@ -316,7 +317,7 @@ func uninstallDocker() error {
 	return nil
 }
 
-func cleanShellConfig(configFile string) error {
+func cleanShellConfigDestroy(configFile string) error {
 	// Read the file
 	content, err := os.ReadFile(configFile)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -48,20 +49,31 @@ type ContainerStatus struct {
 	State   string
 	Ports   []string
 	Created int64
+	Image   string
+	Stats   *ContainerStats
+}
+
+// ContainerStats represents container resource usage statistics
+type ContainerStats struct {
+	CPUPercent    float64
+	MemoryUsage   uint64
+	MemoryLimit   uint64
+	MemoryPercent float64
 }
 
 // ListContainers lists all containers with a specific label
 func (c *Client) ListContainers(ctx context.Context, labelFilter string) ([]ContainerStatus, error) {
-	filters := types.ContainerListOptions{
+	opts := types.ContainerListOptions{
 		All: true,
 	}
 
 	if labelFilter != "" {
-		filters.Filters = types.NewArgs()
-		filters.Filters.Add("label", labelFilter)
+		filterArgs := filters.NewArgs()
+		filterArgs.Add("label", labelFilter)
+		opts.Filters = filterArgs
 	}
 
-	containers, err := c.cli.ContainerList(ctx, filters)
+	containers, err := c.cli.ContainerList(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
@@ -87,6 +99,8 @@ func (c *Client) ListContainers(ctx context.Context, labelFilter string) ([]Cont
 			State:   cont.State,
 			Ports:   ports,
 			Created: cont.Created,
+			Image:   cont.Image,
+			Stats:   nil, // Stats need to be fetched separately
 		})
 	}
 
@@ -159,13 +173,6 @@ func (c *Client) GetContainerByName(ctx context.Context, name string) (*Containe
 	return nil, fmt.Errorf("container not found: %s", name)
 }
 
-// ContainerStats represents container resource usage statistics
-type ContainerStats struct {
-	CPUPercentage float64
-	MemoryUsage   uint64
-	MemoryLimit   uint64
-	PIDsCurrent   uint64
-}
 
 // SystemInfo represents Docker system information
 type SystemInfo struct {
@@ -212,10 +219,10 @@ func (c *Client) GetContainerStats(ctx context.Context, containerID string) (*Co
 	}
 
 	return &ContainerStats{
-		CPUPercentage: cpuPercent,
+		CPUPercent:    cpuPercent,
 		MemoryUsage:   stats.MemoryStats.Usage,
 		MemoryLimit:   stats.MemoryStats.Limit,
-		PIDsCurrent:   stats.PidsStats.Current,
+		MemoryPercent: float64(stats.MemoryStats.Usage) / float64(stats.MemoryStats.Limit) * 100.0,
 	}, nil
 }
 

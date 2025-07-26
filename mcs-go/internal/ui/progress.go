@@ -66,3 +66,9 @@ func (p *Progress) Fail(message string) {
 	time.Sleep(50 * time.Millisecond) // Brief pause to ensure spinner stops
 	fmt.Printf("\r%s %s\n", failMark, message)
 }
+
+// Update updates the current task message
+func (p *Progress) Update(task string) {
+	p.currentTask = task
+	fmt.Printf("\r%s %s", spinnerStyle.Render(spinnerFrames[p.frame]), task)
+}

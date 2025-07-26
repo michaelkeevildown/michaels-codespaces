@@ -8,16 +8,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/spf13/cobra"
 )
 
-var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
-	runningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	stoppedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-)
 
 // ListCommand creates the 'list' command
 func ListCommand() *cobra.Command {

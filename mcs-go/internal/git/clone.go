@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -145,7 +146,7 @@ func ValidateRepository(ctx context.Context, url string) error {
 	defer os.RemoveAll(tempDir)
 
 	// Try to list references without cloning
-	remote := git.NewRemote(nil, &git.RemoteConfig{
+	remote := git.NewRemote(nil, &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{url},
 	})
@@ -164,7 +165,7 @@ func ValidateRepository(ctx context.Context, url string) error {
 
 // GetDefaultBranch determines the default branch of a repository
 func GetDefaultBranch(ctx context.Context, url string) (string, error) {
-	remote := git.NewRemote(nil, &git.RemoteConfig{
+	remote := git.NewRemote(nil, &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{url},
 	})

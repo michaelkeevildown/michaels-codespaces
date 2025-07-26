@@ -38,6 +38,7 @@ else
         
         git clone -b "$BRANCH" "https://github.com/$REPO.git" "$TEMP_DIR" || exit 1
         cd "$TEMP_DIR/mcs-go"
+        go mod download || exit 1
         go build -o "$MCS_HOME/bin/mcs" cmd/mcs/main.go || exit 1
         echo "Built from source"
     else

@@ -30,6 +30,7 @@ if command -v go >/dev/null 2>&1; then
     cd "$TEMP/mcs-go"
     
     mkdir -p "$MCS_HOME/bin"
+    go mod download
     go build -o "$MCS_HOME/bin/mcs" cmd/mcs/main.go
     
     echo "✅ Built successfully"
@@ -52,6 +53,7 @@ else
         cd "$TEMP/mcs-go"
         
         mkdir -p "$MCS_HOME/bin"
+        /usr/local/go/bin/go mod download
         /usr/local/go/bin/go build -o "$MCS_HOME/bin/mcs" cmd/mcs/main.go
     else
         echo "Please install Go from https://go.dev"

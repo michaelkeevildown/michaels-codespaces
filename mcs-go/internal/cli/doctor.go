@@ -17,7 +17,7 @@ var (
 	passStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	failStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	doctorDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
 // DoctorCommand creates the 'doctor' command

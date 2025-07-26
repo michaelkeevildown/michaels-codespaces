@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -152,7 +151,7 @@ func GenerateDockerCompose(config ComposeConfig) ([]byte, error) {
 }
 
 // GenerateInitScript generates the component installation script
-func GenerateInitScript(components []components.Component) ([]byte, error) {
+func GenerateInitScript(comps []components.Component) ([]byte, error) {
 	tmpl, err := template.New("init-script").Parse(initScriptTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse init script template: %w", err)
@@ -161,7 +160,7 @@ func GenerateInitScript(components []components.Component) ([]byte, error) {
 	data := struct {
 		Components []components.Component
 	}{
-		Components: components,
+		Components: comps,
 	}
 
 	var buf bytes.Buffer

@@ -34,7 +34,7 @@ func LogsCommand() *cobra.Command {
 			
 			// Get container
 			containerName := fmt.Sprintf("%s-dev", name)
-			container, err := dockerClient.GetContainerByName(ctx, containerName)
+			_, err = dockerClient.GetContainerByName(ctx, containerName)
 			if err != nil {
 				return fmt.Errorf("codespace '%s' not found", name)
 			}

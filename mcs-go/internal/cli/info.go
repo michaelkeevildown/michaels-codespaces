@@ -8,17 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/spf13/cobra"
 )
 
-var (
-	infoStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	urlStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	sectionStyle = lipgloss.NewStyle().Bold(true).Underline(true)
-)
 
 // InfoCommand creates the 'info' command
 func InfoCommand() *cobra.Command {
@@ -92,14 +86,13 @@ func InfoCommand() *cobra.Command {
 						// Get container stats
 						stats, err := dockerClient.GetContainerStats(ctx, container.ID)
 						if err == nil {
-							fmt.Printf("%s %.2f%%\n", infoStyle.Render("CPU Usage:"), stats.CPUPercentage)
+							fmt.Printf("%s %.2f%%\n", infoStyle.Render("CPU Usage:"), stats.CPUPercent)
 							fmt.Printf("%s %s / %s (%.1f%%)\n", 
 								infoStyle.Render("Memory:"), 
 								formatBytes(stats.MemoryUsage),
 								formatBytes(stats.MemoryLimit),
 								(float64(stats.MemoryUsage)/float64(stats.MemoryLimit))*100,
 							)
-							fmt.Printf("%s %d\n", infoStyle.Render("PIDs:"), stats.PIDsCurrent)
 						}
 						
 						// Uptime
@@ -122,7 +115,7 @@ func InfoCommand() *cobra.Command {
 			
 			if info, err := os.Stat(cs.Path); err == nil && info.IsDir() {
 				size, _ := getDirSize(cs.Path)
-				fmt.Printf("%s %s\n", infoStyle.Render("Total Size:"), formatBytes(size))
+				fmt.Printf("%s %s\n", infoStyle.Render("Total Size:"), formatBytes(uint64(size)))
 			}
 			
 			// Quick actions

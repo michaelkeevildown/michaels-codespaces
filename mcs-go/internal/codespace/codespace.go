@@ -1,7 +1,6 @@
 package codespace
 
 import (
-	"fmt"
 	"path/filepath"
 	"time"
 
@@ -19,6 +18,9 @@ type Codespace struct {
 	VSCodeURL  string
 	AppURL     string
 	Components []string
+	Language   string
+	Password   string
+	VSCodePort int
 }
 
 // CreateOptions holds options for creating a codespace
@@ -27,6 +29,7 @@ type CreateOptions struct {
 	Repository *utils.Repository
 	Components []components.Component
 	NoStart    bool
+	CloneDepth int
 }
 
 // GetPath returns the full path for the codespace
@@ -47,38 +50,3 @@ func NewManager() *Manager {
 	}
 }
 
-// Create creates a new codespace
-func (m *Manager) Create(opts CreateOptions) (*Codespace, error) {
-	// TODO: Implement actual creation logic
-	return nil, fmt.Errorf("not implemented")
-}
-
-// List returns all codespaces
-func (m *Manager) List() ([]Codespace, error) {
-	// TODO: Implement listing logic
-	return nil, fmt.Errorf("not implemented")
-}
-
-// Get returns a specific codespace
-func (m *Manager) Get(name string) (*Codespace, error) {
-	// TODO: Implement get logic
-	return nil, fmt.Errorf("not implemented")
-}
-
-// Start starts a codespace
-func (m *Manager) Start(name string) error {
-	// TODO: Implement start logic
-	return fmt.Errorf("not implemented")
-}
-
-// Stop stops a codespace
-func (m *Manager) Stop(name string) error {
-	// TODO: Implement stop logic
-	return fmt.Errorf("not implemented")
-}
-
-// Remove removes a codespace
-func (m *Manager) Remove(name string) error {
-	// TODO: Implement remove logic
-	return fmt.Errorf("not implemented")
-}

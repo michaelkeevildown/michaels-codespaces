@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -413,12 +412,3 @@ func installDockerLinux() error {
 	return nil
 }
 
-// Style definitions
-var (
-	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	infoStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
-	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	urlStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Underline(true)
-)

@@ -23,9 +23,7 @@ var (
 	statusHeaderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
 	statusLabelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	statusValueStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	sectionStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
 	dividerStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
-	errorStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	runningStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
 	stoppedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	dimStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -84,8 +82,8 @@ func showSystemStatus() error {
 	// Memory
 	vmStat, _ := mem.VirtualMemory()
 	memUsage := fmt.Sprintf("%s/%s (%.1f%%)", 
-		formatBytes(vmStat.Used), 
-		formatBytes(vmStat.Total),
+		formatBytesStatus(int64(vmStat.Used)), 
+		formatBytesStatus(int64(vmStat.Total)),
 		vmStat.UsedPercent)
 	fmt.Printf("💾 Memory: %s\n", memUsage)
 	
@@ -98,8 +96,8 @@ func showSystemStatus() error {
 	// Disk
 	diskStat, _ := disk.Usage("/")
 	diskUsage := fmt.Sprintf("%s/%s (%s used)", 
-		formatBytes(diskStat.Used), 
-		formatBytes(diskStat.Total),
+		formatBytesStatus(int64(diskStat.Used)), 
+		formatBytesStatus(int64(diskStat.Total)),
 		fmt.Sprintf("%.0f%%", diskStat.UsedPercent))
 	fmt.Printf("💿 Disk: %s\n", diskUsage)
 	fmt.Println()
@@ -305,8 +303,8 @@ func showCodespaceStatus(name string) error {
 				if stats := container.Stats; stats != nil {
 					fmt.Printf("   CPU: %.1f%%\n", stats.CPUPercent)
 					fmt.Printf("   Memory: %s / %s (%.1f%%)\n", 
-						formatBytes(int64(stats.MemoryUsage)), 
-						formatBytes(int64(stats.MemoryLimit)),
+						formatBytesStatus(int64(stats.MemoryUsage)), 
+						formatBytesStatus(int64(stats.MemoryLimit)),
 						stats.MemoryPercent)
 				}
 			}
@@ -338,7 +336,7 @@ func showCodespaceStatus(name string) error {
 	return nil
 }
 
-func formatBytes(bytes int64) string {
+func formatBytesStatus(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
 		return fmt.Sprintf("%d B", bytes)

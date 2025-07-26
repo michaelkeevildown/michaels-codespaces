@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -16,12 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	infoStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	urlStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Underline(true)
-)
 
 // CreateCommand creates the 'create' command
 func CreateCommand() *cobra.Command {

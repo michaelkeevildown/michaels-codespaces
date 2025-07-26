@@ -10,7 +10,6 @@ import (
 
 	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/michaelkeevildown/mcs/internal/ports"
-	"github.com/michaelkeevildown/mcs/pkg/utils"
 )
 
 // Metadata represents codespace metadata stored on disk
