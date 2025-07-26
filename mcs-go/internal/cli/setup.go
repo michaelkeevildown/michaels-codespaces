@@ -52,19 +52,10 @@ func runSetup(bootstrap, skipDeps, skipGitHub bool) error {
 		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
-	// Check and install dependencies
+	// Check and install dependencies FIRST (includes Git)
 	if !skipDeps {
 		if err := checkAndInstallDependencies(); err != nil {
 			return fmt.Errorf("dependency check failed: %w", err)
-		}
-	}
-
-	// Configure GitHub authentication
-	if !skipGitHub {
-		if err := configureGitHub(); err != nil {
-			// Don't fail setup if GitHub config fails
-			fmt.Println(warningStyle.Render("⚠️  GitHub configuration skipped"))
-			fmt.Println("You can configure it later with: mcs setup --skip-deps")
 		}
 	}
 
@@ -74,10 +65,19 @@ func runSetup(bootstrap, skipDeps, skipGitHub bool) error {
 		fmt.Println(warningStyle.Render("⚠️  Shell integration setup failed"))
 	}
 
-	// Clone/update MCS source for component installers
+	// Clone/update MCS source for component installers (needs Git)
 	if err := setupMCSSource(); err != nil {
 		// Non-fatal
 		fmt.Println(warningStyle.Render("⚠️  Could not clone MCS source"))
+	}
+
+	// Configure GitHub authentication (after MCS source is available)
+	if !skipGitHub {
+		if err := configureGitHub(); err != nil {
+			// Don't fail setup if GitHub config fails
+			fmt.Println(warningStyle.Render("⚠️  GitHub configuration skipped"))
+			fmt.Println("You can configure it later with: mcs setup --skip-deps")
+		}
 	}
 
 	// Success message
@@ -148,15 +148,23 @@ func checkAndInstallDependencies() error {
 
 	// Check Git
 	if !commandExists("git") {
-		fmt.Println(warningStyle.Render("Git not found"))
+		fmt.Println(warningStyle.Render("⚠️  Git not found"))
 		if runtime.GOOS == "linux" {
-			fmt.Println("Installing Git...")
+			fmt.Println(infoStyle.Render("📦 Installing Git..."))
+			// First update package list
+			updateCmd := exec.Command("sudo", "apt-get", "update", "-qq")
+			if err := updateCmd.Run(); err != nil {
+				fmt.Println(warningStyle.Render("Failed to update package list"))
+			}
+			
+			// Install Git
 			cmd := exec.Command("sudo", "apt-get", "install", "-y", "git")
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
 				return fmt.Errorf("failed to install Git: %w", err)
 			}
+			fmt.Println(successStyle.Render("✓ Git installed successfully"))
 		} else {
 			fmt.Println("Please install Git from: https://git-scm.com/downloads")
 		}
@@ -274,6 +282,14 @@ func setupShellIntegration() error {
 }
 
 func setupMCSSource() error {
+	// Check if git is available first
+	if !commandExists("git") {
+		fmt.Println()
+		fmt.Println(warningStyle.Render("⚠️  Git not available, skipping MCS source setup"))
+		fmt.Println("You can set it up later after installing Git")
+		return nil
+	}
+
 	fmt.Println()
 	fmt.Println(infoStyle.Render("📦 Setting up MCS source..."))
 
