@@ -1,0 +1,306 @@
+#!/bin/bash
+
+# MCS Go Installation Script
+# Installs the Go version of Michael's Codespaces
+# Philosophy: Build from source by default, with pre-built binary as fallback
+
+set -e
+
+# Colors
+if [[ -t 1 ]]; then
+    RED=$(printf '\033[31m')
+    GREEN=$(printf '\033[32m')
+    YELLOW=$(printf '\033[33m')
+    BLUE=$(printf '\033[34m')
+    BOLD=$(printf '\033[1m')
+    RESET=$(printf '\033[0m')
+else
+    RED='' GREEN='' YELLOW='' BLUE='' BOLD='' RESET=''
+fi
+
+# Helper functions
+info() {
+    printf "${BLUE}==>${RESET} ${BOLD}%s${RESET}\n" "$1"
+}
+
+success() {
+    printf "${GREEN}✓${RESET} %s\n" "$1"
+}
+
+warning() {
+    printf "${YELLOW}⚠${RESET}  %s\n" "$1"
+}
+
+error() {
+    printf "${RED}✗${RESET} %s\n" "$1" >&2
+}
+
+# Configuration
+MCS_HOME="${MCS_HOME:-$HOME/.mcs}"
+REPO_URL="${MCS_REPO_URL:-https://github.com/michaelkeevildown/mcs.git}"
+
+# Detect OS and architecture
+detect_platform() {
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+    
+    case "$ARCH" in
+        x86_64)
+            ARCH="amd64"
+            ;;
+        aarch64|arm64)
+            ARCH="arm64"
+            ;;
+        *)
+            error "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+    esac
+    
+    case "$OS" in
+        linux|darwin)
+            PLATFORM="${OS}-${ARCH}"
+            ;;
+        *)
+            error "Unsupported operating system: $OS"
+            exit 1
+            ;;
+    esac
+}
+
+# Check for required tools
+check_requirements() {
+    local missing=()
+    
+    # Check for Go (optional - for building from source)
+    if ! command -v go >/dev/null 2>&1; then
+        GO_AVAILABLE=false
+    else
+        GO_AVAILABLE=true
+        GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+    fi
+    
+    # Check for Docker (required)
+    if ! command -v docker >/dev/null 2>&1; then
+        missing+=("docker")
+    fi
+    
+    # Check for Git (required)
+    if ! command -v git >/dev/null 2>&1; then
+        missing+=("git")
+    fi
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        error "Missing required tools: ${missing[*]}"
+        error "Please install them before running this installer"
+        exit 1
+    fi
+}
+
+# Clone or update repository
+clone_or_update_repo() {
+    if [ -d "$MCS_HOME/.git" ]; then
+        info "Updating existing MCS installation..."
+        cd "$MCS_HOME"
+        git pull origin main || {
+            warning "Failed to update repository. Continuing with existing code..."
+        }
+    else
+        info "Cloning MCS repository..."
+        # Backup existing directory if it exists
+        if [ -d "$MCS_HOME" ]; then
+            warning "Backing up existing MCS directory..."
+            mv "$MCS_HOME" "${MCS_HOME}.backup.$(date +%Y%m%d_%H%M%S)"
+        fi
+        
+        git clone "$REPO_URL" "$MCS_HOME" || {
+            error "Failed to clone repository"
+            exit 1
+        }
+    fi
+}
+
+# Build from source
+build_from_source() {
+    cd "$MCS_HOME/mcs-go"
+    
+    info "Downloading dependencies..."
+    go mod download || {
+        error "Failed to download Go dependencies"
+        exit 1
+    }
+    
+    info "Building MCS..."
+    VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')
+    go build -ldflags "-X main.version=$VERSION" \
+        -o "$BIN_DIR/mcs" cmd/mcs/main.go || {
+        error "Failed to build MCS"
+        exit 1
+    }
+    
+    success "Built MCS from source (version: $VERSION)"
+}
+
+# Main installation
+main() {
+    info "Installing Michael's Codespaces (Go version)..."
+    echo ""
+    echo "Installation philosophy: Build from source for full control"
+    echo "Repository: $REPO_URL"
+    echo ""
+    
+    # Detect platform
+    detect_platform
+    info "Detected platform: $PLATFORM"
+    
+    # Check requirements
+    check_requirements
+    
+    # Set installation directory
+    INSTALL_DIR="$MCS_HOME"
+    BIN_DIR="$INSTALL_DIR/bin"
+    
+    # Create directories
+    info "Creating installation directories..."
+    mkdir -p "$BIN_DIR"
+    mkdir -p "$HOME/codespaces"
+    
+    # Clone or update repository
+    clone_or_update_repo
+    
+    # Determine installation method
+    if [ "$GO_AVAILABLE" = true ]; then
+        build_from_source
+    else
+        warning "Go compiler not found!"
+        echo ""
+        echo "MCS is designed to be built from source for full transparency and control."
+        echo "You have two options:"
+        echo ""
+        echo "1. Install Go (recommended):"
+        echo "   - Ubuntu/Debian: sudo apt install golang-go"
+        echo "   - macOS: brew install go"
+        echo "   - Or download from: https://go.dev/dl/"
+        echo ""
+        echo "2. Download pre-built binary (fallback):"
+        echo "   This option requires trusting pre-compiled binaries."
+        echo ""
+        read -p "Would you like to download a pre-built binary? [y/N] " -n 1 -r
+        echo
+        
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            # Try to download pre-built binary
+            RELEASE_URL="https://github.com/michaelkeevildown/mcs/releases/latest/download/mcs-${PLATFORM}"
+            
+            info "Downloading from: $RELEASE_URL"
+            if curl -fsSL "$RELEASE_URL" -o "$BIN_DIR/mcs"; then
+                chmod +x "$BIN_DIR/mcs"
+                success "Downloaded pre-built binary"
+                warning "Note: You're using a pre-built binary. For full control, install Go and rebuild."
+            else
+                error "Failed to download pre-built binary"
+                error "Please install Go and run this script again"
+                exit 1
+            fi
+        else
+            error "Installation cancelled. Please install Go and run this script again."
+            exit 1
+        fi
+    fi
+    
+    # Create shell completion
+    info "Setting up shell completion..."
+    "$BIN_DIR/mcs" completion bash > "$INSTALL_DIR/mcs.bash" 2>/dev/null || true
+    "$BIN_DIR/mcs" completion zsh > "$INSTALL_DIR/mcs.zsh" 2>/dev/null || true
+    
+    # Check if PATH needs updating
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        warning "Add MCS to your PATH by adding this to your shell config:"
+        echo ""
+        echo "  export PATH=\"$BIN_DIR:\$PATH\""
+        echo ""
+        
+        # Detect shell and provide specific instructions
+        if [ -n "$BASH_VERSION" ]; then
+            echo "For bash, add to ~/.bashrc:"
+            echo "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc"
+            echo "  source ~/.bashrc"
+        elif [ -n "$ZSH_VERSION" ]; then
+            echo "For zsh, add to ~/.zshrc:"
+            echo "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc"
+            echo "  source ~/.zshrc"
+        fi
+    fi
+    
+    # Create update script
+    info "Creating update script..."
+    cat > "$BIN_DIR/mcs-update.sh" << 'EOF'
+#!/bin/bash
+# MCS Update Script
+set -e
+
+MCS_HOME="${MCS_HOME:-$HOME/.mcs}"
+BIN_DIR="$MCS_HOME/bin"
+
+echo "Updating MCS from source..."
+
+# Pull latest changes
+cd "$MCS_HOME"
+git pull origin main || {
+    echo "Failed to pull latest changes"
+    exit 1
+}
+
+# Rebuild from source
+cd "$MCS_HOME/mcs-go"
+go mod download
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')
+go build -ldflags "-X main.version=$VERSION" -o "$BIN_DIR/mcs" cmd/mcs/main.go || {
+    echo "Failed to build MCS"
+    exit 1
+}
+
+echo "Successfully updated MCS to version: $VERSION"
+
+# Show changes
+echo ""
+echo "Recent changes:"
+git log --oneline -10
+EOF
+    chmod +x "$BIN_DIR/mcs-update.sh"
+    
+    # Test installation
+    if "$BIN_DIR/mcs" version >/dev/null 2>&1; then
+        success "MCS installed successfully!"
+        echo ""
+        info "Version: $("$BIN_DIR/mcs" version)"
+        echo ""
+        info "Installation details:"
+        echo "  Location: $MCS_HOME"
+        echo "  Binary: $BIN_DIR/mcs"
+        if [ "$GO_AVAILABLE" = true ]; then
+            echo "  Built from: source"
+        else
+            echo "  Built from: pre-built binary"
+        fi
+        echo ""
+        info "Get started with:"
+        echo "  mcs create github.com/user/repo"
+        echo "  mcs list"
+        echo "  mcs --help"
+        echo ""
+        info "Update MCS:"
+        if [ "$GO_AVAILABLE" = true ]; then
+            echo "  mcs update                    # Auto-update via git pull + rebuild"
+            echo "  $BIN_DIR/mcs-update.sh       # Manual update script"
+        else
+            echo "  Install Go first, then run: mcs update"
+        fi
+    else
+        error "Installation completed but MCS test failed"
+        exit 1
+    fi
+}
+
+# Run main function
+main "$@"
