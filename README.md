@@ -45,15 +45,18 @@ Your Ubuntu Server + Our Magic =
 🔒 Your code never leaves your servers
 ```
 
-## 🎯 One-Line Install
+## 🎯 Quick Install
 
-Just like Homebrew, but for development environments:
+Michael's Codespaces is now built in Go for better performance and reliability:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/install.sh)"
+# Clone and install from source (recommended)
+git clone https://github.com/michaelkeevildown/michaels-codespaces.git
+cd michaels-codespaces/mcs-go
+./install.sh
 ```
 
-That's it! In about 2 minutes, you'll have a fully functional codespace platform. ☕
+That's it! The installer will build MCS from source and set up everything you need. ☕
 
 ## 🎮 How It Works
 
@@ -63,7 +66,7 @@ Run the command above. It sets up Docker, configures your system, and installs t
 ### 2️⃣ **Authenticate** (30 seconds)
 ```bash
 mcs doctor  # Check everything is working
-~/codespaces/shared/scripts/setup-github-auth.sh
+mcs setup auth  # Configure GitHub authentication
 ```
 Add your SSH keys and GitHub token. Done once, works everywhere.
 
@@ -72,13 +75,20 @@ Add your SSH keys and GitHub token. Done once, works everywhere.
 mcs create git@github.com:torvalds/linux.git
 ```
 
+Names are automatically generated from the repository (e.g., `torvalds-linux`). If a name collision occurs, a fun suffix is added (e.g., `torvalds-linux-happy-narwhal`).
+
 ### 4️⃣ **Start Coding!**
 ```
 🎉 Codespace created successfully!
 
-📦 Codespace: torvalds-linux
-🌐 VS Code URL: http://localhost:8080
-🔑 Password: FAKEPASSWORDHERE
+╭─────────────────────────────────────────────╮
+│                                             │
+│  📍 Name: torvalds-linux                    │
+│  🔗 VS Code: http://localhost:8080          │
+│  🔑 Password: [secure-16-char-password]     │
+│  📂 Path: /home/user/codespaces/torvalds-linux │
+│                                             │
+╰─────────────────────────────────────────────╯
 ```
 
 Open that URL and boom - you're coding in a fully isolated Linux kernel dev environment!
