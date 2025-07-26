@@ -294,12 +294,18 @@ func setupMCSSource() error {
 	fmt.Println(infoStyle.Render("📦 Setting up MCS source..."))
 
 	mcsHome := filepath.Join(os.Getenv("HOME"), ".mcs")
+	sourceDir := filepath.Join(mcsHome, "source")
+	
+	// Create source directory if it doesn't exist
+	if err := os.MkdirAll(sourceDir, 0755); err != nil {
+		return fmt.Errorf("failed to create source directory: %w", err)
+	}
 	
 	// Check if already cloned
-	if _, err := os.Stat(filepath.Join(mcsHome, ".git")); err == nil {
+	if _, err := os.Stat(filepath.Join(sourceDir, ".git")); err == nil {
 		// Update existing
 		cmd := exec.Command("git", "pull", "origin", "main")
-		cmd.Dir = mcsHome
+		cmd.Dir = sourceDir
 		if err := cmd.Run(); err != nil {
 			return err
 		}
@@ -309,20 +315,20 @@ func setupMCSSource() error {
 
 	// Clone repository
 	repoURL := "https://github.com/michaelkeevildown/michaels-codespaces.git"
-	cmd := exec.Command("git", "clone", repoURL, mcsHome)
+	cmd := exec.Command("git", "clone", repoURL, sourceDir)
 	
 	if err := cmd.Run(); err != nil {
 		// Try with token if available
 		tokenFile := filepath.Join(os.Getenv("HOME"), "codespaces", "auth", "tokens", "github.token")
 		if token, err := os.ReadFile(tokenFile); err == nil && len(token) > 0 {
 			authURL := fmt.Sprintf("https://token:%s@github.com/michaelkeevildown/michaels-codespaces.git", string(token))
-			cmd = exec.Command("git", "clone", authURL, mcsHome)
+			cmd = exec.Command("git", "clone", authURL, sourceDir)
 			if err := cmd.Run(); err != nil {
 				return err
 			}
 			// Remove token from URL
 			cmd = exec.Command("git", "remote", "set-url", "origin", repoURL)
-			cmd.Dir = mcsHome
+			cmd.Dir = sourceDir
 			cmd.Run()
 		} else {
 			return err

@@ -215,9 +215,16 @@ func updateMCS(checkOnly bool) error {
 	}
 	
 	// Check if running from source installation
-	gitDir := filepath.Join(mcsHome, ".git")
+	// Source code is now in ~/.mcs/source
+	sourceDir := filepath.Join(mcsHome, "source")
+	gitDir := filepath.Join(sourceDir, ".git")
 	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		return fmt.Errorf("MCS was not installed from source. Please reinstall using the install script")
+		// Check old location for backward compatibility
+		oldGitDir := filepath.Join(mcsHome, ".git")
+		if _, err := os.Stat(oldGitDir); err == nil {
+			return fmt.Errorf("MCS source in wrong location. Run 'mcs setup' to fix")
+		}
+		return fmt.Errorf("MCS source not found. Run 'mcs setup' to clone source repository")
 	}
 	
 	if checkOnly {
@@ -225,7 +232,7 @@ func updateMCS(checkOnly bool) error {
 		
 		// Fetch latest changes
 		cmd := exec.Command("git", "fetch", "origin", "main")
-		cmd.Dir = mcsHome
+		cmd.Dir = sourceDir
 		if err := cmd.Run(); err != nil {
 			progress.Fail("Failed to check for updates")
 			return fmt.Errorf("failed to fetch updates: %w", err)
@@ -233,7 +240,7 @@ func updateMCS(checkOnly bool) error {
 		
 		// Check if we're behind
 		cmd = exec.Command("git", "rev-list", "--count", "HEAD..origin/main")
-		cmd.Dir = mcsHome
+		cmd.Dir = sourceDir
 		output, err := cmd.Output()
 		if err != nil {
 			progress.Fail("Failed to check update status")
@@ -254,13 +261,13 @@ func updateMCS(checkOnly bool) error {
 	
 	// Get current version before update
 	cmdVersion := exec.Command("git", "describe", "--tags", "--always", "--dirty")
-	cmdVersion.Dir = mcsHome
+	cmdVersion.Dir = sourceDir
 	currentVersion, _ := cmdVersion.Output()
 	
 	// Pull latest changes
 	progress.Update("Pulling latest changes")
 	cmd := exec.Command("git", "pull", "origin", "main")
-	cmd.Dir = mcsHome
+	cmd.Dir = sourceDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		progress.Fail("Failed to pull updates")
@@ -274,7 +281,7 @@ func updateMCS(checkOnly bool) error {
 	}
 	
 	// Change to mcs-go directory
-	mcsGoDir := filepath.Join(mcsHome, "mcs-go")
+	mcsGoDir := filepath.Join(sourceDir, "mcs-go")
 	
 	// Download dependencies
 	progress.Update("Downloading dependencies")
@@ -288,7 +295,7 @@ func updateMCS(checkOnly bool) error {
 	// Build new binary
 	progress.Update("Building MCS")
 	newVersion := exec.Command("git", "describe", "--tags", "--always", "--dirty")
-	newVersion.Dir = mcsHome
+	newVersion.Dir = sourceDir
 	versionOutput, _ := newVersion.Output()
 	version := strings.TrimSpace(string(versionOutput))
 	
@@ -311,7 +318,7 @@ func updateMCS(checkOnly bool) error {
 		fmt.Println("\nChanges in this update:")
 		cmd = exec.Command("git", "log", "--oneline", "--no-decorate",
 			fmt.Sprintf("%s..%s", strings.TrimSpace(string(currentVersion)), version))
-		cmd.Dir = mcsHome
+		cmd.Dir = sourceDir
 		if output, err := cmd.Output(); err == nil {
 			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 			for _, line := range lines {

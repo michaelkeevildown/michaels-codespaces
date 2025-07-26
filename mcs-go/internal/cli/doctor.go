@@ -201,10 +201,17 @@ func checkMCSInstallation() error {
 		return fmt.Errorf("MCS home not found at %s", mcsHome)
 	}
 	
-	// Check if it's a git repository (for updates)
-	gitDir := filepath.Join(mcsHome, ".git")
+	// Check if source directory is a git repository (for updates)
+	// The source code is cloned into ~/.mcs/source, not ~/.mcs itself
+	sourceDir := filepath.Join(mcsHome, "source")
+	gitDir := filepath.Join(sourceDir, ".git")
 	if _, err := os.Stat(gitDir); err != nil {
-		return fmt.Errorf("not a git repository (updates will fail)")
+		// Check if old location exists (for backward compatibility)
+		oldGitDir := filepath.Join(mcsHome, ".git")
+		if _, err := os.Stat(oldGitDir); err == nil {
+			return fmt.Errorf("source repository in wrong location (run 'mcs setup' to fix)")
+		}
+		return fmt.Errorf("source repository not found (run 'mcs setup' to clone)")
 	}
 	
 	return nil

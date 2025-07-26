@@ -148,10 +148,12 @@ func PerformUpdate(checkOnly bool) error {
 	}
 
 	// Check if it's a source installation
-	gitDir := filepath.Join(mcsHome, ".git")
+	// Source code is now in ~/.mcs/source
+	sourceDir := filepath.Join(mcsHome, "source")
+	gitDir := filepath.Join(sourceDir, ".git")
 	if _, err := os.Stat(gitDir); err == nil {
 		// Source installation - use git pull
-		return updateFromSource(mcsHome, checkOnly)
+		return updateFromSource(sourceDir, checkOnly)
 	} else {
 		// Binary installation
 		return updateBinary(checkOnly)
@@ -159,17 +161,17 @@ func PerformUpdate(checkOnly bool) error {
 }
 
 // updateFromSource updates a source installation
-func updateFromSource(mcsHome string, checkOnly bool) error {
+func updateFromSource(sourceDir string, checkOnly bool) error {
 	// Fetch latest changes
 	cmd := exec.Command("git", "fetch", "origin", "main")
-	cmd.Dir = mcsHome
+	cmd.Dir = sourceDir
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to fetch updates: %w", err)
 	}
 
 	// Check for updates
 	cmd = exec.Command("git", "rev-list", "HEAD...origin/main", "--count")
-	cmd.Dir = mcsHome
+	cmd.Dir = sourceDir
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)
@@ -190,7 +192,7 @@ func updateFromSource(mcsHome string, checkOnly bool) error {
 	// Pull latest changes
 	fmt.Println("🔄 Updating MCS from source...")
 	cmd = exec.Command("git", "pull", "origin", "main")
-	cmd.Dir = mcsHome
+	cmd.Dir = sourceDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -199,8 +201,9 @@ func updateFromSource(mcsHome string, checkOnly bool) error {
 
 	// Rebuild
 	fmt.Println("🔨 Rebuilding MCS...")
+	mcsGoDir := filepath.Join(sourceDir, "mcs-go")
 	cmd = exec.Command("go", "build", "-o", "mcs", "./cmd/mcs")
-	cmd.Dir = mcsHome
+	cmd.Dir = mcsGoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -209,16 +212,13 @@ func updateFromSource(mcsHome string, checkOnly bool) error {
 
 	// Install to PATH
 	fmt.Println("📦 Installing updated binary...")
-	srcBinary := filepath.Join(mcsHome, "mcs")
-	destBinary := "/usr/local/bin/mcs"
+	mcsHome := filepath.Join(os.Getenv("HOME"), ".mcs")
+	srcBinary := filepath.Join(mcsGoDir, "mcs")
+	destBinary := filepath.Join(mcsHome, "bin", "mcs")
 	
-	// Try without sudo first
+	// Copy to MCS bin directory (no sudo needed)
 	if err := copyFile(srcBinary, destBinary); err != nil {
-		// Try with sudo
-		cmd = exec.Command("sudo", "cp", srcBinary, destBinary)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to install binary: %w", err)
-		}
+		return fmt.Errorf("failed to install binary: %w", err)
 	}
 
 	fmt.Println("✅ MCS has been updated successfully!")
