@@ -47,16 +47,22 @@ Your Ubuntu Server + Our Magic =
 
 ## 🎯 Quick Install
 
-Michael's Codespaces is now built in Go for better performance and reliability:
+Michael's Codespaces is built entirely in Go. There are no bash scripts - everything is compiled into a single binary:
 
 ```bash
-# Clone and install from source (recommended)
+# Clone and install the Go implementation
 git clone https://github.com/michaelkeevildown/michaels-codespaces.git
-cd michaels-codespaces/mcs-go
-./install.sh
+cd michaels-codespaces/mcs-go  # The ONLY implementation
+./install.sh  # Builds from Go source
 ```
 
-That's it! The installer will build MCS from source and set up everything you need. ☕
+The installer will:
+- Build the `mcs` binary from Go source code
+- Install it to `~/.mcs/bin/mcs`
+- Set up your PATH
+- Configure shell completions
+
+☕ That's it! Just 1 bash scripts, and then just a clean Go binary.
 
 ## 🎮 How It Works
 
@@ -75,20 +81,24 @@ Add your SSH keys and GitHub token. Done once, works everywhere.
 mcs create git@github.com:torvalds/linux.git
 ```
 
-Names are automatically generated from the repository (e.g., `torvalds-linux`). If a name collision occurs, a fun suffix is added (e.g., `torvalds-linux-happy-narwhal`).
+Names are automatically generated from the repository:
+- Format: `{owner}-{repo}` (e.g., `torvalds-linux`)
+- Collision handling: Adds fun suffix (e.g., `torvalds-linux-happy-narwhal`)
+- No `--name` flag needed - names are always auto-generated
+- Secure 16-character passwords are generated automatically
 
 ### 4️⃣ **Start Coding!**
 ```
 🎉 Codespace created successfully!
 
-╭─────────────────────────────────────────────╮
-│                                             │
-│  📍 Name: torvalds-linux                    │
-│  🔗 VS Code: http://localhost:8080          │
-│  🔑 Password: [secure-16-char-password]     │
+╭────────────────────────────────────────────────╮
+│                                                │
+│  📍 Name: torvalds-linux                       │
+│  🔗 VS Code: http://localhost:8080             │
+│  🔑 Password: [secure-16-char-password]        │
 │  📂 Path: /home/user/codespaces/torvalds-linux │
-│                                             │
-╰─────────────────────────────────────────────╯
+│                                                │
+╰────────────────────────────────────────────────╯
 ```
 
 Open that URL and boom - you're coding in a fully isolated Linux kernel dev environment!
@@ -134,7 +144,7 @@ facebook-react                stopped    port 8082
 
 ## 🛠️ Daily Commands
 
-Once installed, everything is managed through the `mcs` command:
+Once installed, everything is managed through the `mcs` Go binary:
 
 ```bash
 # Core workflow
@@ -143,13 +153,13 @@ mcs list (or mcs ls)                       # Show all codespaces
 mcs start myproject                        # Fire it up
 mcs stop myproject                         # Stop when done
 
-# Enhanced creation with options
+# Enhanced creation with options (Go implementation)
 mcs create --language node git@github.com:user/app.git      # Auto-configure for Node.js
 mcs create --image custom:latest git@github.com:user/repo   # Use custom Docker image
 mcs create --ports "8090:8080,3001:3000" git@github.com:user/repo  # Custom port mapping
-mcs create --name my-project git@github.com:user/repo       # Custom codespace name
 mcs create --no-start git@github.com:user/repo              # Create but don't start
 mcs create --force git@github.com:user/repo                 # Overwrite existing
+# Note: --name flag has been removed - names are always auto-generated
 
 # Development
 mcs exec myproject                         # Jump into container shell
@@ -253,17 +263,20 @@ mcs start your-repo                             # Start if needed
 
 ### Development & Testing Installation
 
-When testing new features or fixes, you can install from a specific branch:
+The Go implementation uses environment variables for configuration:
 
 ```bash
-# Install from a development branch
-CODESPACE_BRANCH=fix-installation-directories /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/fix-installation-directories/install.sh)"
+# Install from a specific branch
+MCS_BRANCH=my-feature git clone -b my-feature https://github.com/michaelkeevildown/michaels-codespaces.git
+cd michaels-codespaces/mcs-go
+./install.sh
 
-# Debug mode for troubleshooting
-DEBUG=1 CODESPACE_BRANCH=my-feature /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/my-feature/install.sh)"
+# Build with debug symbols
+cd mcs-go
+go build -gcflags="all=-N -l" ./cmd/mcs
 
-# Non-interactive installation (for scripts)
-NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/install.sh)"
+# Run with verbose output
+DEBUG=1 mcs create git@github.com:user/repo.git
 ```
 
 ## 🎪 Advanced Usage
@@ -454,12 +467,19 @@ cat ~/codespaces/myproject/.env  # Shows detected settings
 
 ## 🤝 Contributing
 
-Found a bug? Want a feature? PRs welcome!
+Found a bug? Want a feature? PRs welcome! All development is in Go:
 
 ```bash
 mcs create git@github.com:michaelkeevildown/michaels-codespaces.git
 # Now you're developing Michael's Codespaces... in Michael's Codespaces! 🤯
+
+# The Go source is in mcs-go/
+cd ~/codespaces/michaelkeevildown-michaels-codespaces/src/mcs-go
+go build ./cmd/mcs  # Build the binary
+go test ./...       # Run tests
 ```
+
+**Remember**: This project is 100% Go. Don't create bash scripts - implement features in Go!
 
 ## 📜 License
 

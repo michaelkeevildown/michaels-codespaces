@@ -1,5 +1,25 @@
 # Claude Code Configuration for Claude Flow
 
+## 🚨 CRITICAL: MCS (Michael's Codespaces) is NOW GO!
+
+**MANDATORY**: When working with MCS (Michael's Codespaces):
+
+1. **The Go implementation in `mcs-go/` is the ONLY implementation**
+2. **All bash scripts in `scripts/` have been REMOVED**
+3. **Use the Go binary `mcs` for ALL operations**
+4. **DO NOT recreate bash scripts - implement in Go**
+5. **The old bash version no longer exists**
+
+### MCS Go Implementation Details:
+
+- **Location**: `/mcs-go/` directory
+- **Binary**: Built from `cmd/mcs/main.go`
+- **Installation**: `cd mcs-go && ./install.sh`
+- **Language**: Pure Go - no bash scripts
+- **Features**: All features implemented in Go modules
+- **Container naming**: Auto-generated from `owner-repo` format
+- **Collision handling**: Adds funny suffixes like `happy-narwhal`
+
 ## 🚨 CRITICAL: PARALLEL EXECUTION AFTER SWARM INIT
 
 **MANDATORY RULE**: Once swarm is initialized with memory, ALL subsequent operations MUST be parallel:
@@ -904,3 +924,49 @@ Claude Flow extends the base coordination with:
 ---
 
 Remember: **Claude Flow coordinates, Claude Code creates!** Start with `mcp__claude-flow__swarm_init` to enhance your development workflow.
+
+## 🎯 MCS-SPECIFIC RULES
+
+### When working on MCS (Michael's Codespaces):
+
+1. **ALWAYS use Go** - The entire project is in Go now
+2. **NEVER create bash scripts** - All functionality must be in Go
+3. **Use the mcs-go directory** - This is the only implementation
+4. **Follow Go conventions** - Use proper Go module structure
+5. **Container naming** - Always use `owner-repo` format with collision detection
+
+### MCS Architecture (Go):
+
+```
+mcs-go/
+├── cmd/mcs/          # Main CLI entry point
+├── internal/         # Internal packages
+│   ├── cli/         # Command implementations
+│   ├── codespace/   # Codespace management
+│   ├── docker/      # Docker operations
+│   └── ui/          # Terminal UI (Bubble Tea)
+├── pkg/utils/       # Shared utilities
+│   ├── names.go     # Name generation & collision detection
+│   └── repository.go # Git URL parsing
+└── install.sh       # Go build installer
+```
+
+### Important MCS Go Commands:
+
+```bash
+# Installation
+cd mcs-go && ./install.sh
+
+# Usage
+mcs create git@github.com:owner/repo.git  # Creates: owner-repo
+mcs list                                  # List all codespaces
+mcs start owner-repo                      # Start a codespace
+mcs stop owner-repo                       # Stop a codespace
+```
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+When working on MCS, ALWAYS use Go - NEVER create bash scripts.
