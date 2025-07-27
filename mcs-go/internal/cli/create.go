@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/components"
 	"github.com/michaelkeevildown/mcs/internal/ui"
@@ -76,8 +75,8 @@ If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 			name := utils.GenerateUniqueCodespaceName(repo.Owner, repo.Name, checkExists)
 
 			fmt.Println()
-			fmt.Printf("📦 Creating codespace: %s\n", infoStyle.Render(name))
-			fmt.Printf("📁 Repository: %s\n", urlStyle.Render(repo.URL))
+			fmt.Printf("📦 Creating codespace: %s\n", name)
+			fmt.Printf("📁 Repository: %s\n", repo.URL)
 			fmt.Println()
 
 			// Component selection
@@ -115,7 +114,7 @@ If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 		},
 	}
 
-	// Removed --name flag as names are now auto-generated from repository
+	// Note: --name flag has been removed - names are auto-generated from repository
 	cmd.Flags().BoolVar(&noStart, "no-start", false, "Don't start the codespace after creation")
 	cmd.Flags().BoolVar(&skipSelector, "skip-selector", false, "Skip component selection (use defaults)")
 
@@ -205,7 +204,7 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 
 func showSuccess(cs *codespace.Codespace) {
 	fmt.Println()
-	fmt.Println(successStyle.Render("✨ Codespace created successfully!"))
+	fmt.Println("✨ Codespace created successfully!")
 	fmt.Println()
 	
 	// Create the perfect box format
