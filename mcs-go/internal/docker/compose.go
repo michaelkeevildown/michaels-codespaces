@@ -97,7 +97,6 @@ mkdir -p /home/coder/.mcs/components
 
 echo "📦 Installing {{ .Name }}..."
 if [ -f /home/coder/.components/{{ .Installer }} ]; then
-    chmod +x /home/coder/.components/{{ .Installer }}
     /home/coder/.components/{{ .Installer }}
     echo "✅ {{ .Name }} installed successfully"
 else
