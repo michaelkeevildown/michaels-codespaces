@@ -215,18 +215,20 @@ func configureGitHub() error {
 	fmt.Println()
 	fmt.Println(infoStyle.Render("🔐 Configuring GitHub authentication..."))
 
-	tokenFile := filepath.Join(os.Getenv("HOME"), "codespaces", "auth", "tokens", "github.token")
+	// Get config manager
+	cfg, err := config.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 
-	// Check if token already exists
-	if _, err := os.Stat(tokenFile); err == nil {
-		// Try to validate existing token
-		if token, err := os.ReadFile(tokenFile); err == nil && len(token) > 0 {
-			// Verify it works
-			if username := verifyGitHubToken(string(token)); username != "" {
-				fmt.Println(successStyle.Render("✓ GitHub token already configured"))
-				fmt.Printf("%s  Authenticated as: %s%s%s\n", infoStyle.Render("ℹ"), boldStyle.Render(""), username, "")
-				return nil
-			}
+	// Check if token already exists in config
+	existingToken := cfg.GetGitHubToken()
+	if existingToken != "" {
+		// Verify it works
+		if username := verifyGitHubToken(existingToken); username != "" {
+			fmt.Println(successStyle.Render("✓ GitHub token already configured"))
+			fmt.Printf("%s  Authenticated as: %s%s%s\n", infoStyle.Render("ℹ"), boldStyle.Render(""), username, "")
+			return nil
 		}
 	}
 
@@ -235,10 +237,10 @@ func configureGitHub() error {
 		fmt.Println("Using GitHub token from environment variable...")
 		token = strings.TrimSpace(token)
 		if username := verifyGitHubToken(token); username != "" {
-			if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
+			if err := cfg.SetGitHubToken(token); err != nil {
 				return err
 			}
-			fmt.Println(successStyle.Render("✓ GitHub token saved"))
+			fmt.Println(successStyle.Render("✓ GitHub token saved to MCS config"))
 			fmt.Printf("%s  Authenticated as: %s%s%s\n", infoStyle.Render("ℹ"), boldStyle.Render(""), username, "")
 			return nil
 		}
@@ -324,13 +326,13 @@ func configureGitHub() error {
 			continue
 		}
 
-		// Save token
-		if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
+		// Save token to MCS config
+		if err := cfg.SetGitHubToken(token); err != nil {
 			fmt.Println(errorStyle.Render("Failed to save token: " + err.Error()))
 			continue
 		}
 
-		fmt.Println(successStyle.Render("✓ GitHub token saved successfully!"))
+		fmt.Println(successStyle.Render("✓ GitHub token saved to MCS config successfully!"))
 		
 		// Verify token
 		fmt.Println(infoStyle.Render("Verifying token with GitHub..."))
@@ -341,7 +343,8 @@ func configureGitHub() error {
 		} else {
 			// Token verification failed
 			fmt.Println(errorStyle.Render("Token verification failed"))
-			os.Remove(tokenFile) // Remove invalid token
+			// Remove invalid token from config
+			cfg.SetGitHubToken("")
 			fmt.Println()
 			fmt.Print("Retry with a different token? [Y/n] ")
 			if !getUserConfirmation("Retry with a different token? [Y/n]") {
@@ -433,18 +436,23 @@ func setupMCSSource() error {
 	cmd := exec.Command("git", "clone", repoURL, sourceDir)
 	
 	if err := cmd.Run(); err != nil {
-		// Try with token if available
-		tokenFile := filepath.Join(os.Getenv("HOME"), "codespaces", "auth", "tokens", "github.token")
-		if token, err := os.ReadFile(tokenFile); err == nil && len(token) > 0 {
-			authURL := fmt.Sprintf("https://token:%s@github.com/michaelkeevildown/michaels-codespaces.git", string(token))
-			cmd = exec.Command("git", "clone", authURL, sourceDir)
-			if err := cmd.Run(); err != nil {
+		// Try with token from config if available
+		cfg, cfgErr := config.NewManager()
+		if cfgErr == nil {
+			token := cfg.GetGitHubToken()
+			if token != "" {
+				authURL := fmt.Sprintf("https://token:%s@github.com/michaelkeevildown/michaels-codespaces.git", token)
+				cmd = exec.Command("git", "clone", authURL, sourceDir)
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+				// Remove token from URL
+				cmd = exec.Command("git", "remote", "set-url", "origin", repoURL)
+				cmd.Dir = sourceDir
+				cmd.Run()
+			} else {
 				return err
 			}
-			// Remove token from URL
-			cmd = exec.Command("git", "remote", "set-url", "origin", repoURL)
-			cmd.Dir = sourceDir
-			cmd.Run()
 		} else {
 			return err
 		}

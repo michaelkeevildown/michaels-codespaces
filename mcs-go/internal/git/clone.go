@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	mcsconfig "github.com/michaelkeevildown/mcs/internal/config"
 )
 
 // CloneOptions holds options for cloning a repository
@@ -61,13 +62,19 @@ func Clone(ctx context.Context, opts CloneOptions) error {
 	// Determine the URL to use for cloning
 	cloneURL := opts.URL
 	
-	// If we have a GitHub token and this is a GitHub SSH URL, convert to HTTPS
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		if strings.HasPrefix(opts.URL, "git@github.com:") {
-			// Convert git@github.com:user/repo.git to https://github.com/user/repo.git
-			cloneURL = strings.Replace(opts.URL, "git@github.com:", "https://github.com/", 1)
-			fmt.Printf("Using GitHub token authentication (converted SSH to HTTPS)\n")
+	// Check for GitHub token (env var or config)
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		if cfg, err := mcsconfig.NewManager(); err == nil {
+			token = cfg.GetGitHubToken()
 		}
+	}
+	
+	// If we have a GitHub token and this is a GitHub SSH URL, convert to HTTPS
+	if token != "" && strings.HasPrefix(opts.URL, "git@github.com:") {
+		// Convert git@github.com:user/repo.git to https://github.com/user/repo.git
+		cloneURL = strings.Replace(opts.URL, "git@github.com:", "https://github.com/", 1)
+		fmt.Printf("Using GitHub token authentication (converted SSH to HTTPS)\n")
 	}
 
 	// Setup clone options
@@ -108,13 +115,21 @@ func Clone(ctx context.Context, opts CloneOptions) error {
 // detectAuthMethod attempts to detect the appropriate auth method
 func detectAuthMethod(url string) transport.AuthMethod {
 	// First, check if we have a GitHub token - this is preferred over SSH
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		// Check if this is a GitHub URL (SSH or HTTPS)
-		if strings.Contains(url, "github.com") {
-			return &http.BasicAuth{
-				Username: "token",
-				Password: token,
-			}
+	// Check environment variable first (for CI/CD compatibility)
+	token := os.Getenv("GITHUB_TOKEN")
+	
+	// If no env var, check MCS config
+	if token == "" {
+		if cfg, err := mcsconfig.NewManager(); err == nil {
+			token = cfg.GetGitHubToken()
+		}
+	}
+	
+	// If we have a token and this is a GitHub URL, use it
+	if token != "" && strings.Contains(url, "github.com") {
+		return &http.BasicAuth{
+			Username: "token",
+			Password: token,
 		}
 	}
 
@@ -163,10 +178,15 @@ func ValidateRepository(ctx context.Context, url string) error {
 
 	// Convert SSH URL to HTTPS if we have a GitHub token
 	validateURL := url
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		if strings.HasPrefix(url, "git@github.com:") {
-			validateURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		if cfg, err := mcsconfig.NewManager(); err == nil {
+			token = cfg.GetGitHubToken()
 		}
+	}
+	
+	if token != "" && strings.HasPrefix(url, "git@github.com:") {
+		validateURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
 	}
 
 	// Try to list references without cloning
@@ -191,10 +211,15 @@ func ValidateRepository(ctx context.Context, url string) error {
 func GetDefaultBranch(ctx context.Context, url string) (string, error) {
 	// Convert SSH URL to HTTPS if we have a GitHub token
 	checkURL := url
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		if strings.HasPrefix(url, "git@github.com:") {
-			checkURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		if cfg, err := mcsconfig.NewManager(); err == nil {
+			token = cfg.GetGitHubToken()
 		}
+	}
+	
+	if token != "" && strings.HasPrefix(url, "git@github.com:") {
+		checkURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
 	}
 
 	remote := git.NewRemote(nil, &config.RemoteConfig{

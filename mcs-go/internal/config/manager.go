@@ -22,6 +22,9 @@ type Config struct {
 	LastUpdateCheck         int64  `json:"last_update_check"`          // unix timestamp
 	LastKnownVersion        string `json:"last_known_version"`
 
+	// Authentication
+	GitHubToken string `json:"github_token,omitempty"`
+
 	// Metadata
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -251,4 +254,19 @@ func (m *Manager) ShouldCheckForUpdate() bool {
 
 	nextCheck := lastCheck + interval
 	return time.Now().Unix() >= nextCheck
+}
+
+// GetGitHubToken returns the stored GitHub token
+func (m *Manager) GetGitHubToken() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.config.GitHubToken
+}
+
+// SetGitHubToken stores the GitHub token
+func (m *Manager) SetGitHubToken(token string) error {
+	m.mu.Lock()
+	m.config.GitHubToken = token
+	m.mu.Unlock()
+	return m.save()
 }
