@@ -158,6 +158,54 @@ clone_or_update_repo() {
     fi
 }
 
+# Setup PATH configuration
+setup_path_config() {
+    # Detect shell and update config
+    local shell_config=""
+    local shell_name=""
+    
+    if [ -n "$BASH_VERSION" ]; then
+        shell_config="$HOME/.bashrc"
+        shell_name="bash"
+    elif [ -n "$ZSH_VERSION" ]; then
+        shell_config="$HOME/.zshrc"
+        shell_name="zsh"
+    else
+        # Try to detect from SHELL variable
+        case "$SHELL" in
+            */bash)
+                shell_config="$HOME/.bashrc"
+                shell_name="bash"
+                ;;
+            */zsh)
+                shell_config="$HOME/.zshrc"
+                shell_name="zsh"
+                ;;
+            *)
+                warning "Could not detect shell type"
+                return
+                ;;
+        esac
+    fi
+    
+    if [ -n "$shell_config" ]; then
+        # Check if PATH entry already exists
+        if ! grep -q "$BIN_DIR" "$shell_config" 2>/dev/null; then
+            info "Adding MCS to PATH in $shell_config..."
+            echo "" >> "$shell_config"
+            echo "# MCS - Michael's Codespaces" >> "$shell_config"
+            echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$shell_config"
+            success "PATH configuration added to $shell_config"
+            echo ""
+            info "To use MCS in this session, run:"
+            echo "  source $shell_config"
+            echo ""
+        else
+            info "MCS already in PATH configuration"
+        fi
+    fi
+}
+
 # Build from source
 build_from_source() {
     cd "$MCS_HOME/mcs-go"
@@ -175,6 +223,18 @@ build_from_source() {
         error "Failed to build MCS"
         exit 1
     }
+    
+    # Ensure binary is executable
+    chmod +x "$BIN_DIR/mcs" || {
+        error "Failed to make MCS executable"
+        exit 1
+    }
+    
+    # Verify binary exists
+    if [ ! -f "$BIN_DIR/mcs" ]; then
+        error "MCS binary not found at $BIN_DIR/mcs after build"
+        exit 1
+    fi
     
     success "Built MCS from source (version: $VERSION)"
 }
@@ -257,24 +317,7 @@ main() {
     "$BIN_DIR/mcs" completion bash > "$INSTALL_DIR/mcs.bash" 2>/dev/null || true
     "$BIN_DIR/mcs" completion zsh > "$INSTALL_DIR/mcs.zsh" 2>/dev/null || true
     
-    # Check if PATH needs updating
-    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-        warning "Add MCS to your PATH by adding this to your shell config:"
-        echo ""
-        echo "  export PATH=\"$BIN_DIR:\$PATH\""
-        echo ""
-        
-        # Detect shell and provide specific instructions
-        if [ -n "$BASH_VERSION" ]; then
-            echo "For bash, add to ~/.bashrc:"
-            echo "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc"
-            echo "  source ~/.bashrc"
-        elif [ -n "$ZSH_VERSION" ]; then
-            echo "For zsh, add to ~/.zshrc:"
-            echo "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc"
-            echo "  source ~/.zshrc"
-        fi
-    fi
+    # PATH is already configured by setup_path_config()
     
     # Create update script
     info "Creating update script..."
@@ -314,10 +357,49 @@ EOF
     chmod +x "$BIN_DIR/mcs-update.sh"
     
     # Test installation
-    if "$BIN_DIR/mcs" version >/dev/null 2>&1; then
-        success "MCS installed successfully!"
+    info "Testing MCS installation..."
+    
+    # Check if binary exists
+    if [ ! -f "$BIN_DIR/mcs" ]; then
+        error "MCS binary not found at: $BIN_DIR/mcs"
+        error "Installation failed - binary was not created"
+        exit 1
+    fi
+    
+    # Check if binary is executable
+    if [ ! -x "$BIN_DIR/mcs" ]; then
+        error "MCS binary is not executable"
+        info "Attempting to fix permissions..."
+        chmod +x "$BIN_DIR/mcs"
+    fi
+    
+    # Test running the binary
+    if ! "$BIN_DIR/mcs" version >/dev/null 2>&1; then
+        error "MCS binary exists but failed to run"
+        error "Trying to diagnose the issue..."
+        
+        # Try to get more information about the failure
+        echo "Binary location: $BIN_DIR/mcs"
+        echo "File info: $(file "$BIN_DIR/mcs" 2>&1 || echo 'file command not available')"
+        echo "Permissions: $(ls -la "$BIN_DIR/mcs")"
         echo ""
-        info "Version: $("$BIN_DIR/mcs" version)"
+        echo "Attempting to run with error output:"
+        "$BIN_DIR/mcs" version 2>&1 || true
+        echo ""
+        
+        error "Installation completed but MCS test failed"
+        error "The binary was built but cannot run. This might be due to:"
+        error "  - Architecture mismatch (built for wrong platform)"
+        error "  - Missing shared libraries"
+        error "  - Other runtime issues"
+        echo ""
+        info "You can try running it manually: $BIN_DIR/mcs"
+        exit 1
+    fi
+    
+    success "MCS installed successfully!"
+    echo ""
+    info "Version: $("$BIN_DIR/mcs" version)"
         echo ""
         info "Installation details:"
         echo "  Location: $MCS_HOME"
@@ -328,6 +410,12 @@ EOF
             echo "  Built from: pre-built binary"
         fi
         echo ""
+        
+        # Add to PATH temporarily for this session so setup can work
+        export PATH="$BIN_DIR:$PATH"
+        
+        # Setup PATH for future sessions
+        setup_path_config
         
         # Run setup to configure network and other settings
         info "Running initial setup..."
