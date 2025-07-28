@@ -35,6 +35,22 @@ error() {
     printf "${RED}✗${RESET} %s\n" "$1" >&2
 }
 
+# Display MCS ASCII art header
+show_header() {
+    local header_color="${BLUE}${BOLD}"
+    
+    printf "${header_color}"
+    cat << 'EOF'
+  __  __  ___ ___ 
+ |  \/  |/ __/ __|
+ | |\/| | (__\__ \
+ |_|  |_|\___|___/
+                  
+Michael's Codespaces
+EOF
+    printf "${RESET}\n\n"
+}
+
 # Configuration
 MCS_HOME="${MCS_HOME:-$HOME/.mcs}"
 REPO_URL="${MCS_REPO_URL:-https://github.com/michaelkeevildown/michaels-codespaces.git}"
@@ -309,6 +325,9 @@ build_from_source() {
 
 # Main installation
 main() {
+    # Show beautiful header
+    show_header
+    
     info "Installing Michael's Codespaces (Go version)..."
     echo ""
     echo "Installation philosophy: Build from source for full control"
@@ -491,6 +510,10 @@ EOF
     
     success "MCS installed successfully!"
     echo ""
+    
+    # Show header again for successful completion
+    show_header
+    
     info "Version: $("$BIN_DIR/mcs" --version 2>/dev/null || echo "unknown")"
     echo ""
     info "Installation details:"
