@@ -634,67 +634,58 @@ func installDockerLinux(verbose bool) error {
 		"NEEDRESTART_SUSPEND=1",
 	)
 
-	// Update package list with progress
-	progress.Update("Updating package list...")
-	fmt.Println(dimStyle.Render("This may take a moment..."))
-	
+	// Update package list
+	progress.Stop() // Stop spinner to show apt output cleanly
+	fmt.Println()
+	fmt.Println(infoStyle.Render("📦 Updating package lists..."))
+	fmt.Println(commandStyle.Render("→ Running: sudo apt-get update"))
 	if verbose {
-		fmt.Println(commandStyle.Render("→ Running: sudo apt-get update"))
 		fmt.Println(dimStyle.Render("  This will refresh the package lists from all repositories"))
-	} else {
-		fmt.Println(dimStyle.Render("→ Running: sudo apt-get update"))
 	}
+	fmt.Println()
 	
 	cmd := exec.CommandContext(ctx, "sudo", "apt-get", "update")
 	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	
-	// In verbose mode, show all output; otherwise filter it
-	if verbose {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				progress.Fail("Package update timed out")
-				return fmt.Errorf("apt-get update timed out after 10 minutes")
-			}
-			progress.Fail("Failed to update package list")
-			return err
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("apt-get update timed out after 10 minutes")
 		}
-	} else {
-		// For non-verbose mode, show filtered output
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				progress.Fail("Package update timed out")
-				return fmt.Errorf("apt-get update timed out after 10 minutes")
-			}
-			progress.Fail("Failed to update package list")
-			return err
-		}
+		return fmt.Errorf("failed to update package list: %w", err)
 	}
+	
+	fmt.Println()
+	fmt.Println(successStyle.Render("✓ Package lists updated"))
 
 	// Install prerequisites
-	progress.Update("Installing prerequisites...")
-	fmt.Println(dimStyle.Render("→ Installing: ca-certificates curl gnupg lsb-release gpg"))
+	fmt.Println()
+	fmt.Println(infoStyle.Render("📦 Installing prerequisites..."))
+	fmt.Println(commandStyle.Render("→ Running: sudo apt-get install -y ca-certificates curl gnupg lsb-release gpg"))
+	fmt.Println()
+	
 	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y",
 		"--no-install-recommends",
 		"ca-certificates", "curl", "gnupg", "lsb-release", "gpg")
 	cmd.Env = env
-	// Show output for debugging
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			progress.Fail("Prerequisites installation timed out")
 			return fmt.Errorf("prerequisites installation timed out")
 		}
-		progress.Fail("Failed to install prerequisites")
-		return err
+		return fmt.Errorf("failed to install prerequisites: %w", err)
 	}
+	
+	fmt.Println()
+	fmt.Println(successStyle.Render("✓ Prerequisites installed"))
 
 	// Add Docker's GPG key
-	progress.Update("Adding Docker GPG key")
+	fmt.Println()
+	progress = ui.NewProgress()
+	progress.Start("Adding Docker GPG key")
 	
 	// Create keyrings directory
 	cmd = exec.Command("sudo", "mkdir", "-p", "/etc/apt/keyrings")
@@ -791,25 +782,36 @@ func installDockerLinux(verbose bool) error {
 	}
 
 	// Install Docker
-	progress.Update("Installing Docker packages...")
-	fmt.Println(dimStyle.Render("Note: This may remove old Docker versions if present"))
+	progress.Stop() // Stop spinner for apt operations
 	
 	// Update package list again after adding Docker repo
-	fmt.Println(dimStyle.Render("→ Updating package list with Docker repository..."))
+	fmt.Println()
+	fmt.Println(infoStyle.Render("📦 Updating package lists with Docker repository..."))
+	fmt.Println(commandStyle.Render("→ Running: sudo apt-get update"))
+	fmt.Println()
+	
 	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "update")
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			progress.Fail("Package update timed out")
 			return fmt.Errorf("apt-get update timed out")
 		}
-		progress.Fail("Failed to update package list")
-		return err
+		return fmt.Errorf("failed to update package list: %w", err)
 	}
+	
+	fmt.Println()
+	fmt.Println(successStyle.Render("✓ Package lists updated"))
 
-	// Install Docker with non-interactive flags
+	// Install Docker packages
+	fmt.Println()
+	fmt.Println(infoStyle.Render("📦 Installing Docker packages..."))
+	fmt.Println(commandStyle.Render("→ Running: sudo apt-get install -y docker-ce docker-ce-cli containerd.io"))
+	fmt.Println(dimStyle.Render("Note: This may take several minutes and remove old Docker versions if present"))
+	fmt.Println()
+	
 	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y",
 		"--no-install-recommends",
 		"--allow-downgrades",
@@ -820,46 +822,55 @@ func installDockerLinux(verbose bool) error {
 		"docker-ce", "docker-ce-cli", "containerd.io", 
 		"docker-buildx-plugin", "docker-compose-plugin")
 	cmd.Env = env
-	// Show output so we can see what's happening
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			progress.Fail("Docker installation timed out")
 			fmt.Println(errorStyle.Render("Installation timed out after 10 minutes"))
 			fmt.Println(infoStyle.Render("You may need to run 'sudo apt-get -f install' to fix any issues"))
 			return fmt.Errorf("Docker installation timed out")
 		}
-		progress.Fail("Failed to install Docker")
-		return err
+		return fmt.Errorf("failed to install Docker: %w", err)
 	}
+	
+	fmt.Println()
+	fmt.Println(successStyle.Render("✓ Docker packages installed"))
 
 	// Start Docker
-	progress.Update("Starting Docker service")
+	fmt.Println()
+	fmt.Println(infoStyle.Render("🚀 Starting Docker service..."))
+	
 	cmd = exec.CommandContext(ctx, "sudo", "systemctl", "start", "docker")
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			progress.Fail("Starting Docker timed out")
 			return fmt.Errorf("starting Docker service timed out")
 		}
-		progress.Fail("Failed to start Docker")
-		return err
+		return fmt.Errorf("failed to start Docker: %w", err)
 	}
+	
+	fmt.Println(successStyle.Render("✓ Docker service started"))
 
+	// Enable Docker to start on boot
 	cmd = exec.CommandContext(ctx, "sudo", "systemctl", "enable", "docker")
 	cmd.Run() // Don't fail if this doesn't work
 
 	// Add user to docker group
-	progress.Update("Adding user to docker group")
+	fmt.Println()
+	fmt.Println(infoStyle.Render("👤 Adding user to docker group..."))
+	
 	user := os.Getenv("USER")
 	cmd = exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", user)
 	if err := cmd.Run(); err != nil {
-		progress.Fail("Failed to add user to docker group")
-		fmt.Println(warningStyle.Render("You may need to log out and back in for docker permissions"))
+		fmt.Println(warningStyle.Render("⚠️  Failed to add user to docker group"))
+		fmt.Println(dimStyle.Render("   You may need to log out and back in for docker permissions"))
+	} else {
+		fmt.Println(successStyle.Render("✓ User added to docker group"))
+		fmt.Println(dimStyle.Render("   Note: You may need to log out and back in for group changes to take effect"))
 	}
 
-	progress.Success("Docker installed successfully")
+	fmt.Println()
+	fmt.Println(headerStyle.Render("🎉 Docker installed successfully!"))
 	return nil
 }
 
