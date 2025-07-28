@@ -190,12 +190,9 @@ func showSuccess(cs *codespace.Codespace) {
 	}
 	
 	// Create box elements
-	boxLine := make([]byte, maxWidth)
-	for i := range boxLine {
-		boxLine[i] = '─'
-	}
-	boxTop := "╭" + string(boxLine[1:maxWidth-1]) + "╮"
-	boxBot := "╰" + string(boxLine[1:maxWidth-1]) + "╯"
+	boxLine := strings.Repeat("─", maxWidth-2)
+	boxTop := "╭" + boxLine + "╮"
+	boxBot := "╰" + boxLine + "╯"
 	
 	// Helper function to pad line to box width
 	padLine := func(content string) string {

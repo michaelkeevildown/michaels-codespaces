@@ -12,4 +12,7 @@ var (
 	urlStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Underline(true)
 	sectionStyle = lipgloss.NewStyle().Bold(true).Underline(true)
 	boldStyle    = lipgloss.NewStyle().Bold(true)
+	runningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+	stoppedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	dividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 )

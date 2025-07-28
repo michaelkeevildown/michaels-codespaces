@@ -24,9 +24,6 @@ var (
 	statusHeaderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
 	statusLabelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	statusValueStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	dividerStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
-	runningStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
-	stoppedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	dimStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 

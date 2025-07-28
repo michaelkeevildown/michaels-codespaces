@@ -3,9 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/michaelkeevildown/mcs/internal/codespace"
@@ -79,29 +77,115 @@ func ListCommand() *cobra.Command {
 }
 
 func displayTable(codespaces []codespace.Codespace) error {
-	// Create a tabwriter
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	// Calculate column widths
+	colWidths := struct {
+		name       int
+		status     int
+		repository int
+		ports      int
+		created    int
+	}{
+		name:       4, // "NAME"
+		status:     10, // "STATUS" + icon
+		repository: 10, // "REPOSITORY"
+		ports:      5,  // "PORTS"
+		created:    7,  // "CREATED"
+	}
+	
+	// Prepare data for display
+	type row struct {
+		name       string
+		status     string
+		statusRaw  string
+		repository string
+		ports      string
+		created    string
+	}
+	
+	rows := make([]row, len(codespaces))
+	
+	// Process each codespace and calculate max widths
+	for i, cs := range codespaces {
+		r := row{
+			name:       cs.Name,
+			statusRaw:  cs.Status,
+			repository: truncateRepo(cs.Repository, 40),
+			ports:      formatPorts(cs),
+			created:    formatTime(cs.CreatedAt),
+		}
+		
+		// Format status separately to handle color codes
+		if cs.Status == "running" {
+			r.status = "● running"
+		} else {
+			r.status = "○ stopped"
+		}
+		
+		// Update max widths
+		if len(r.name) > colWidths.name {
+			colWidths.name = len(r.name)
+		}
+		if len(r.repository) > colWidths.repository {
+			colWidths.repository = len(r.repository)
+		}
+		if len(r.ports) > colWidths.ports {
+			colWidths.ports = len(r.ports)
+		}
+		if len(r.created) > colWidths.created {
+			colWidths.created = len(r.created)
+		}
+		
+		rows[i] = r
+	}
+	
+	// Add padding
+	colWidths.name += 2
+	colWidths.status += 2
+	colWidths.repository += 2
+	colWidths.ports += 2
+	colWidths.created += 2
 	
 	// Print header
-	fmt.Fprintln(w, headerStyle.Render("NAME\tSTATUS\tREPOSITORY\tPORTS\tCREATED"))
+	header := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
+		colWidths.name, "NAME",
+		colWidths.status, "STATUS",
+		colWidths.repository, "REPOSITORY",
+		colWidths.ports, "PORTS",
+		colWidths.created, "CREATED",
+	)
+	fmt.Println(headerStyle.Render(header))
 	
-	// Print codespaces
-	for _, cs := range codespaces {
-		status := formatStatus(cs.Status)
-		repo := truncateRepo(cs.Repository, 40)
-		ports := formatPorts(cs)
-		created := formatTime(cs.CreatedAt)
+	// Print separator line
+	separator := strings.Repeat("─", len(header))
+	fmt.Println(dividerStyle.Render(separator))
+	
+	// Print rows
+	for _, r := range rows {
+		// Apply color to status
+		var statusDisplay string
+		if r.statusRaw == "running" {
+			statusDisplay = runningStyle.Render(r.status)
+		} else {
+			statusDisplay = stoppedStyle.Render(r.status)
+		}
 		
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			cs.Name,
-			status,
-			repo,
-			ports,
-			created,
+		// Format the row
+		fmt.Printf("%-*s%-*s%-*s%-*s%-*s\n",
+			colWidths.name, r.name,
+			colWidths.status + getColorCodeWidth(statusDisplay, r.status), statusDisplay,
+			colWidths.repository, r.repository,
+			colWidths.ports, r.ports,
+			colWidths.created, r.created,
 		)
 	}
 	
-	return w.Flush()
+	return nil
+}
+
+// getColorCodeWidth calculates the difference between rendered string length and visible length
+func getColorCodeWidth(rendered, plain string) int {
+	// This accounts for ANSI color codes that don't contribute to visible width
+	return len(rendered) - len(plain)
 }
 
 func displaySimple(codespaces []codespace.Codespace) error {
@@ -116,16 +200,6 @@ func displayJSON(codespaces []codespace.Codespace) error {
 	return fmt.Errorf("JSON format not yet implemented")
 }
 
-func formatStatus(status string) string {
-	switch status {
-	case "running":
-		return runningStyle.Render("● running")
-	case "stopped":
-		return stoppedStyle.Render("○ stopped")
-	default:
-		return status
-	}
-}
 
 func truncateRepo(repo string, maxLen int) string {
 	// Remove common prefixes
