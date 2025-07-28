@@ -108,15 +108,30 @@ set -e
 
 echo "🚀 Installing MCS components..."
 
-# Create component directory
+# Fix permissions if needed
+if [ -d /home/coder/.local ] && [ "$(stat -c %U /home/coder/.local 2>/dev/null)" = "root" ]; then
+    echo "Fixing .local directory permissions..."
+    sudo chown -R coder:coder /home/coder/.local || true
+fi
+
+# Create required directories with proper ownership
+mkdir -p /home/coder/.local/bin /home/coder/.local/share
+mkdir -p /home/coder/.npm-global/bin
 mkdir -p /home/coder/.mcs/components
+
+# Ensure PATH includes npm directories
+export PATH="/home/coder/.npm-global/bin:/home/coder/.local/bin:$PATH"
+export NPM_PREFIX="/home/coder/.npm-global"
+
+# Source bashrc to get any PATH updates
+[ -f /home/coder/.bashrc ] && source /home/coder/.bashrc
 
 {{- range .Components }}
 {{- if .Selected }}
 
 echo "📦 Installing {{ .Name }}..."
 if [ -f /home/coder/.components/{{ .Installer }} ]; then
-    /home/coder/.components/{{ .Installer }}
+    /home/coder/.components/{{ .Installer }} install
     echo "✅ {{ .Name }} installed successfully"
 else
     echo "⚠️  Installer not found for {{ .Name }}"

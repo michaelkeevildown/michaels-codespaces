@@ -24,11 +24,10 @@ RUN mkdir -p /opt/mcs/bin /opt/mcs/installers
 # Switch back to coder user
 USER coder
 
-# Set up user environment
-RUN mkdir -p ~/.local/bin ~/.npm-global && \
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
-    echo 'export NPM_PREFIX="$HOME/.npm-global"' >> ~/.bashrc && \
-    echo 'export PATH="$NPM_PREFIX/bin:$PATH"' >> ~/.bashrc
+# Set up user environment with proper ownership
+RUN mkdir -p ~/.local/bin ~/.local/share ~/.npm-global/bin && \
+    echo 'export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc && \
+    echo 'export NPM_PREFIX="$HOME/.npm-global"' >> ~/.bashrc
 
 # Working directory
 WORKDIR /home/coder

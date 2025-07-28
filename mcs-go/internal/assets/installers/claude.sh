@@ -37,9 +37,13 @@ install() {
     echo "Installing Claude Code via npm..."
     npm install -g @anthropic-ai/claude-code@latest
     
-    # Create symlink in local bin
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$NPM_PREFIX/bin/claude" "$HOME/.local/bin/claude"
+    # Create symlink in local bin with error handling
+    if mkdir -p "$HOME/.local/bin" 2>/dev/null; then
+        ln -sf "$NPM_PREFIX/bin/claude" "$HOME/.local/bin/claude"
+    else
+        echo "Warning: Could not create ~/.local/bin, claude will be available via npm global bin"
+        echo "Make sure $NPM_PREFIX/bin is in your PATH"
+    fi
     
     # Update PATH if needed
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -96,18 +100,21 @@ install_nodejs() {
 create_npx_wrapper() {
     echo "Creating claude-code wrapper..."
     
-    # Create wrapper script
-    mkdir -p "$HOME/.local/bin"
-    cat > "$HOME/.local/bin/claude" << 'EOF'
+    # Create wrapper script with error handling
+    if mkdir -p "$HOME/.local/bin" 2>/dev/null; then
+        cat > "$HOME/.local/bin/claude" << 'EOF'
 #!/bin/bash
 # Claude Code wrapper script
 exec npx @anthropic-ai/claude-code@latest "$@"
 EOF
     
     # Make executable
-    chmod +x "$HOME/.local/bin/claude"
-    
-    echo "Created claude wrapper at $HOME/.local/bin/claude"
+        chmod +x "$HOME/.local/bin/claude"
+        echo "Created claude wrapper at $HOME/.local/bin/claude"
+    else
+        echo "Warning: Could not create wrapper in ~/.local/bin"
+        echo "You can use 'npx @anthropic-ai/claude-code' instead"
+    fi
 }
 
 # Configuration function

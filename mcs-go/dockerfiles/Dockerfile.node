@@ -30,5 +30,9 @@ USER coder
 # Configure npm for user-level global installs
 RUN npm config set prefix "$HOME/.npm-global"
 
+# Ensure user directories exist with correct ownership
+RUN mkdir -p ~/.local/bin ~/.local/share ~/.npm-global/bin && \
+    touch ~/.bashrc
+
 # Verify installation
 RUN node --version && npm --version

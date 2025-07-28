@@ -43,7 +43,8 @@ USER coder
 # Set up environments
 RUN echo 'alias python=python3' >> ~/.bashrc && \
     echo 'alias pip=pip3' >> ~/.bashrc && \
-    npm config set prefix "$HOME/.npm-global"
+    npm config set prefix "$HOME/.npm-global" && \
+    mkdir -p ~/.local/bin ~/.local/share ~/.npm-global/bin
 
 # Verify installations
 RUN python3 --version && node --version && npm --version
