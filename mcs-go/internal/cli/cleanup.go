@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/michaelkeevildown/mcs/internal/shell"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -106,8 +107,16 @@ func performCleanup() error {
 		filepath.Join(homeDir, ".bash_profile"),
 	}
 
+	patterns := []string{
+		"Michael's Codespaces",
+		"MCS aliases",
+		"/.mcs/bin",
+		"# Codespace:",
+		"mcs completion",
+	}
+	
 	for _, configFile := range shellConfigs {
-		if err := cleanShellConfig(configFile); err != nil {
+		if err := shell.CleanConfig(configFile, patterns); err != nil {
 			// Don't fail on shell config errors, just warn
 			fmt.Printf("Warning: Failed to clean %s: %v\n", configFile, err)
 		}
@@ -136,43 +145,3 @@ func performCleanup() error {
 	return nil
 }
 
-func cleanShellConfig(configFile string) error {
-	// Read the file
-	content, err := os.ReadFile(configFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist, nothing to clean
-		}
-		return err
-	}
-
-	lines := strings.Split(string(content), "\n")
-	cleanedLines := []string{}
-	skipNext := false
-
-	for i, line := range lines {
-		// Skip MCS-related lines
-		if strings.Contains(line, "Michael's Codespaces") ||
-			strings.Contains(line, "MCS aliases") ||
-			strings.Contains(line, "/.mcs/bin") ||
-			strings.Contains(line, "# Codespace:") ||
-			strings.Contains(line, "mcs completion") {
-			// Also skip the next line if it's an alias
-			if i+1 < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i+1]), "alias ") {
-				skipNext = true
-			}
-			continue
-		}
-
-		if skipNext {
-			skipNext = false
-			continue
-		}
-
-		cleanedLines = append(cleanedLines, line)
-	}
-
-	// Write back the cleaned content
-	cleanedContent := strings.Join(cleanedLines, "\n")
-	return os.WriteFile(configFile, []byte(cleanedContent), 0644)
-}
