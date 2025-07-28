@@ -143,7 +143,9 @@ clone_or_update_repo() {
         fi
         
         # Clone with branch support
-        if git clone -b "$BRANCH" "$clone_url" "$MCS_HOME" 2>/dev/null; then
+        info "Cloning from: $REPO_URL"
+        info "Branch: $BRANCH"
+        if git clone -b "$BRANCH" "$clone_url" "$MCS_HOME"; then
             # Remove token from remote URL after successful clone
             if [ -n "${GITHUB_TOKEN:-}" ]; then
                 cd "$MCS_HOME"

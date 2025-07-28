@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/config"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/michaelkeevildown/mcs/pkg/utils"
@@ -21,11 +22,17 @@ import (
 	"golang.org/x/term"
 )
 
+var (
+	// Add command style for verbose output
+	commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)
+)
+
 // SetupCommand creates the 'setup' command
 func SetupCommand() *cobra.Command {
 	var bootstrap bool
 	var skipDeps bool
 	var skipGitHub bool
+	var verbose bool
 
 	cmd := &cobra.Command{
 		Use:   "setup",
@@ -36,18 +43,19 @@ func SetupCommand() *cobra.Command {
 - Setting up shell integration
 - Creating necessary directories`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSetup(bootstrap, skipDeps, skipGitHub)
+			return runSetup(bootstrap, skipDeps, skipGitHub, verbose)
 		},
 	}
 
 	cmd.Flags().BoolVar(&bootstrap, "bootstrap", false, "Run in bootstrap mode (called by installer)")
 	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "Skip dependency installation")
 	cmd.Flags().BoolVar(&skipGitHub, "skip-github", false, "Skip GitHub configuration")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show detailed command output")
 
 	return cmd
 }
 
-func runSetup(bootstrap, skipDeps, skipGitHub bool) error {
+func runSetup(bootstrap, skipDeps, skipGitHub, verbose bool) error {
 	// Header
 	if bootstrap {
 		fmt.Println(headerStyle.Render("MCS Setup"))
@@ -62,7 +70,7 @@ func runSetup(bootstrap, skipDeps, skipGitHub bool) error {
 
 	// Check and install dependencies FIRST (includes Git)
 	if !skipDeps {
-		if err := checkAndInstallDependencies(); err != nil {
+		if err := checkAndInstallDependencies(verbose); err != nil {
 			return fmt.Errorf("dependency check failed: %w", err)
 		}
 	}
@@ -140,7 +148,7 @@ func createDirectories() error {
 	return nil
 }
 
-func checkAndInstallDependencies() error {
+func checkAndInstallDependencies(verbose bool) error {
 	fmt.Println()
 	fmt.Println(infoStyle.Render("🔍 Checking dependencies..."))
 
@@ -150,7 +158,7 @@ func checkAndInstallDependencies() error {
 		if runtime.GOOS == "linux" {
 			if getUserConfirmation("Would you like to install Docker? [Y/n]") {
 				fmt.Println() // Add newline before progress starts
-				if err := installDockerLinux(); err != nil {
+				if err := installDockerLinux(verbose); err != nil {
 					return fmt.Errorf("failed to install Docker: %w", err)
 				}
 			}
@@ -179,7 +187,10 @@ func checkAndInstallDependencies() error {
 		if runtime.GOOS == "linux" {
 			fmt.Println(infoStyle.Render("📦 Installing Git..."))
 			// First update package list
-			updateCmd := exec.Command("sudo", "apt-get", "update", "-qq")
+			fmt.Println(infoStyle.Render("📦 Updating package list..."))
+			updateCmd := exec.Command("sudo", "apt-get", "update")
+			updateCmd.Stdout = os.Stdout
+			updateCmd.Stderr = os.Stderr
 			if err := updateCmd.Run(); err != nil {
 				fmt.Println(warningStyle.Render("Failed to update package list"))
 			}
@@ -608,7 +619,7 @@ func verifyGitHubToken(token string) string {
 	return bodyStr[loginStart : loginStart+loginEnd]
 }
 
-func installDockerLinux() error {
+func installDockerLinux(verbose bool) error {
 	progress := ui.NewProgress()
 	progress.Start("Installing Docker")
 
@@ -627,22 +638,46 @@ func installDockerLinux() error {
 	progress.Update("Updating package list...")
 	fmt.Println(dimStyle.Render("This may take a moment..."))
 	
-	cmd := exec.CommandContext(ctx, "sudo", "apt-get", "update", "-qq")
+	if verbose {
+		fmt.Println(commandStyle.Render("→ Running: sudo apt-get update"))
+		fmt.Println(dimStyle.Render("  This will refresh the package lists from all repositories"))
+	} else {
+		fmt.Println(dimStyle.Render("→ Running: sudo apt-get update"))
+	}
+	
+	cmd := exec.CommandContext(ctx, "sudo", "apt-get", "update")
 	cmd.Env = env
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			progress.Fail("Package update timed out")
-			return fmt.Errorf("apt-get update timed out after 10 minutes")
+	
+	// In verbose mode, show all output; otherwise filter it
+	if verbose {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				progress.Fail("Package update timed out")
+				return fmt.Errorf("apt-get update timed out after 10 minutes")
+			}
+			progress.Fail("Failed to update package list")
+			return err
 		}
-		progress.Fail("Failed to update package list")
-		return err
+	} else {
+		// For non-verbose mode, show filtered output
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				progress.Fail("Package update timed out")
+				return fmt.Errorf("apt-get update timed out after 10 minutes")
+			}
+			progress.Fail("Failed to update package list")
+			return err
+		}
 	}
 
 	// Install prerequisites
 	progress.Update("Installing prerequisites...")
-	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y", "-qq",
+	fmt.Println(dimStyle.Render("→ Installing: ca-certificates curl gnupg lsb-release gpg"))
+	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y",
 		"--no-install-recommends",
 		"ca-certificates", "curl", "gnupg", "lsb-release", "gpg")
 	cmd.Env = env
@@ -681,14 +716,16 @@ func installDockerLinux() error {
 		tempFile := "/tmp/docker-gpg-key.asc"
 		
 		// Download the GPG key
-		curlCmd := exec.Command("curl", "-fsSL", "--max-time", "30", "--connect-timeout", "10",
-			"-o", tempFile, "https://download.docker.com/linux/ubuntu/gpg")
+		fmt.Println(dimStyle.Render("  → Downloading Docker GPG key..."))
+		curlCmd := exec.Command("curl", "-fSL", "--max-time", "30", "--connect-timeout", "10",
+			"--progress-bar", "-o", tempFile, "https://download.docker.com/linux/ubuntu/gpg")
 		
-		var curlStderr strings.Builder
-		curlCmd.Stderr = &curlStderr
+		// Show curl progress
+		curlCmd.Stdout = os.Stdout
+		curlCmd.Stderr = os.Stderr
 		
 		if err := curlCmd.Run(); err != nil {
-			lastErr = fmt.Errorf("attempt %d: curl failed: %v (stderr: %s)", attempt, err, curlStderr.String())
+			lastErr = fmt.Errorf("attempt %d: curl failed: %v", attempt, err)
 			// Clean up temp file if it exists
 			os.Remove(tempFile)
 			continue
@@ -702,18 +739,20 @@ func installDockerLinux() error {
 		
 		// Now process the GPG key
 		// Use gpg with explicit flags to avoid hanging
+		fmt.Println(dimStyle.Render("  → Processing GPG key..."))
 		gpgCmd := exec.Command("sudo", "sh", "-c",
 			fmt.Sprintf("gpg --batch --yes --dearmor < %s > /etc/apt/keyrings/docker.gpg", tempFile))
 		
-		var gpgStderr strings.Builder
-		gpgCmd.Stderr = &gpgStderr
+		// Show any gpg output
+		gpgCmd.Stdout = os.Stdout
+		gpgCmd.Stderr = os.Stderr
 		
 		if err := gpgCmd.Run(); err != nil {
 			// If gpg fails, try using cp directly (key might already be in binary format)
 			cpCmd := exec.Command("sudo", "cp", tempFile, "/etc/apt/keyrings/docker.gpg")
 			if cpErr := cpCmd.Run(); cpErr != nil {
-				lastErr = fmt.Errorf("attempt %d: gpg processing failed: %v (stderr: %s), direct copy also failed: %v", 
-					attempt, err, gpgStderr.String(), cpErr)
+				lastErr = fmt.Errorf("attempt %d: gpg processing failed: %v, direct copy also failed: %v", 
+					attempt, err, cpErr)
 				os.Remove(tempFile)
 				continue
 			}
@@ -756,8 +795,11 @@ func installDockerLinux() error {
 	fmt.Println(dimStyle.Render("Note: This may remove old Docker versions if present"))
 	
 	// Update package list again after adding Docker repo
-	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "update", "-qq")
+	fmt.Println(dimStyle.Render("→ Updating package list with Docker repository..."))
+	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "update")
 	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			progress.Fail("Package update timed out")

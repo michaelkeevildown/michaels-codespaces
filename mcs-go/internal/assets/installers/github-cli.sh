@@ -56,16 +56,20 @@ install_debian() {
     echo "Installing GitHub CLI via apt..."
     
     # Install dependencies
-    apt-get update -qq
-    apt-get install -y -qq curl gpg sudo
+    echo "→ Updating package list..."
+    apt-get update
+    echo "→ Installing prerequisites: curl gpg sudo..."
+    apt-get install -y curl gpg sudo
     
     # Add GitHub CLI repository
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
     
     # Install gh
-    apt-get update -qq
-    apt-get install -y -qq gh
+    echo "→ Updating package list with GitHub CLI repository..."
+    apt-get update
+    echo "→ Installing GitHub CLI..."
+    apt-get install -y gh
 }
 
 # Install on RHEL/CentOS/Fedora
