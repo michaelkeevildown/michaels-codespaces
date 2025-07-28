@@ -160,50 +160,88 @@ clone_or_update_repo() {
 
 # Setup PATH configuration
 setup_path_config() {
-    # Detect shell and update config
-    local shell_config=""
-    local shell_name=""
+    local configs_updated=0
+    local path_line="export PATH=\"$BIN_DIR:\$PATH\""
+    local mcs_comment="# MCS - Michael's Codespaces"
     
+    # Function to add PATH to a config file
+    add_to_config() {
+        local config_file="$1"
+        local file_desc="$2"
+        
+        if [ -f "$config_file" ] || [ "$config_file" = "$HOME/.bashrc" ] || [ "$config_file" = "$HOME/.profile" ]; then
+            if ! grep -q "$BIN_DIR" "$config_file" 2>/dev/null; then
+                info "Adding MCS to PATH in $file_desc..."
+                {
+                    echo ""
+                    echo "$mcs_comment"
+                    echo "$path_line"
+                } >> "$config_file"
+                configs_updated=$((configs_updated + 1))
+                success "Updated $config_file"
+            else
+                info "MCS already in PATH in $file_desc"
+            fi
+        fi
+    }
+    
+    # Detect current shell
+    local current_shell=""
     if [ -n "$BASH_VERSION" ]; then
-        shell_config="$HOME/.bashrc"
-        shell_name="bash"
+        current_shell="bash"
     elif [ -n "$ZSH_VERSION" ]; then
-        shell_config="$HOME/.zshrc"
-        shell_name="zsh"
+        current_shell="zsh"
     else
-        # Try to detect from SHELL variable
         case "$SHELL" in
-            */bash)
-                shell_config="$HOME/.bashrc"
-                shell_name="bash"
-                ;;
-            */zsh)
-                shell_config="$HOME/.zshrc"
-                shell_name="zsh"
-                ;;
-            *)
-                warning "Could not detect shell type"
-                return
-                ;;
+            */bash) current_shell="bash" ;;
+            */zsh) current_shell="zsh" ;;
+            */sh) current_shell="sh" ;;
         esac
     fi
     
-    if [ -n "$shell_config" ]; then
-        # Check if PATH entry already exists
-        if ! grep -q "$BIN_DIR" "$shell_config" 2>/dev/null; then
-            info "Adding MCS to PATH in $shell_config..."
-            echo "" >> "$shell_config"
-            echo "# MCS - Michael's Codespaces" >> "$shell_config"
-            echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$shell_config"
-            success "PATH configuration added to $shell_config"
-            echo ""
-            info "To use MCS in this session, run:"
-            echo "  source $shell_config"
-            echo ""
-        else
-            info "MCS already in PATH configuration"
-        fi
+    # Update shell-specific configs
+    case "$current_shell" in
+        bash)
+            add_to_config "$HOME/.bashrc" "~/.bashrc"
+            # Also update .profile for login shells
+            add_to_config "$HOME/.profile" "~/.profile"
+            ;;
+        zsh)
+            add_to_config "$HOME/.zshrc" "~/.zshrc"
+            add_to_config "$HOME/.zprofile" "~/.zprofile"
+            ;;
+        *)
+            # Fallback: update common files
+            add_to_config "$HOME/.profile" "~/.profile"
+            add_to_config "$HOME/.bashrc" "~/.bashrc"
+            ;;
+    esac
+    
+    # Also check for .bash_profile on macOS
+    if [ -f "$HOME/.bash_profile" ]; then
+        add_to_config "$HOME/.bash_profile" "~/.bash_profile"
     fi
+    
+    if [ $configs_updated -gt 0 ]; then
+        echo ""
+        success "PATH configuration updated in $configs_updated file(s)"
+        echo ""
+        warning "MCS has been added to your PATH, but won't be available until you:"
+        echo ""
+        echo "  Option 1: Start a new terminal session"
+        echo "  Option 2: Run one of these commands:"
+        case "$current_shell" in
+            bash) echo "    source ~/.bashrc" ;;
+            zsh) echo "    source ~/.zshrc" ;;
+            *) echo "    source ~/.profile" ;;
+        esac
+        echo ""
+    else
+        success "MCS is already in your PATH configuration"
+    fi
+    
+    # For this session, PATH is already set by the main script
+    info "MCS is available in the current session at: $BIN_DIR/mcs"
 }
 
 # Build from source
@@ -356,6 +394,10 @@ git log --oneline -10
 EOF
     chmod +x "$BIN_DIR/mcs-update.sh"
     
+    # Add to PATH temporarily for this session BEFORE testing
+    export PATH="$BIN_DIR:$PATH"
+    info "Added $BIN_DIR to PATH for current session"
+    
     # Test installation
     info "Testing MCS installation..."
     
@@ -373,6 +415,13 @@ EOF
         chmod +x "$BIN_DIR/mcs"
     fi
     
+    # Verify PATH contains our directory
+    if ! echo "$PATH" | grep -q "$BIN_DIR"; then
+        error "Failed to add $BIN_DIR to PATH"
+        error "Current PATH: $PATH"
+        exit 1
+    fi
+    
     # Test running the binary
     if ! "$BIN_DIR/mcs" version >/dev/null 2>&1; then
         error "MCS binary exists but failed to run"
@@ -388,18 +437,29 @@ EOF
         echo ""
         
         error "Installation completed but MCS test failed"
-        error "The binary was built but cannot run. This might be due to:"
-        error "  - Architecture mismatch (built for wrong platform)"
-        error "  - Missing shared libraries"
-        error "  - Other runtime issues"
         echo ""
-        info "You can try running it manually: $BIN_DIR/mcs"
+        error "TROUBLESHOOTING STEPS:"
+        echo "1. Check if the binary works directly:"
+        echo "   $BIN_DIR/mcs version"
+        echo ""
+        echo "2. If that works, the issue is PATH related. Run:"
+        echo "   export PATH=\"$BIN_DIR:\$PATH\""
+        echo "   mcs version"
+        echo ""
+        echo "3. If the binary doesn't work directly, possible causes:"
+        echo "   - Architecture mismatch (built for wrong platform)"
+        echo "   - Missing shared libraries (try: ldd $BIN_DIR/mcs)"
+        echo "   - Go build issues (try rebuilding with: cd $MCS_HOME/mcs-go && go build -o $BIN_DIR/mcs cmd/mcs/main.go)"
+        echo ""
+        echo "4. For immediate use without PATH issues:"
+        echo "   alias mcs='$BIN_DIR/mcs'"
+        echo ""
         exit 1
     fi
     
     success "MCS installed successfully!"
     echo ""
-    info "Version: $("$BIN_DIR/mcs" version)"
+    info "Version: $("$BIN_DIR/mcs" version 2>/dev/null || echo "unknown")"
     echo ""
     info "Installation details:"
     echo "  Location: $MCS_HOME"
@@ -411,8 +471,15 @@ EOF
     fi
     echo ""
     
-    # Add to PATH temporarily for this session so setup can work
-    export PATH="$BIN_DIR:$PATH"
+    # Check if mcs is available in PATH
+    if command -v mcs >/dev/null 2>&1; then
+        success "✓ MCS is available in your PATH for this session"
+    else
+        warning "⚠ MCS is not yet in your PATH"
+        echo "  Run this command to use MCS immediately:"
+        echo "    export PATH=\"$BIN_DIR:\$PATH\""
+    fi
+    echo ""
     
     # Setup PATH for future sessions
     setup_path_config
