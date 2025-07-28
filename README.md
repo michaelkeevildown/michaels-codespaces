@@ -47,22 +47,24 @@ Your Ubuntu Server + Our Magic =
 
 ## 🎯 Quick Install
 
-Michael's Codespaces is built entirely in Go. There are no bash scripts - everything is compiled into a single binary:
+Michael's Codespaces is built entirely in Go. Install with a single command:
 
 ```bash
-# Clone and install the Go implementation
-git clone https://github.com/michaelkeevildown/michaels-codespaces.git
-cd michaels-codespaces/mcs-go  # The ONLY implementation
-./install.sh  # Builds from Go source
+# Install from source (recommended)
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash
+
+# Or for a specific branch:
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | MCS_BRANCH=feature-branch bash
 ```
 
 The installer will:
-- Build the `mcs` binary from Go source code
+- Build the `mcs` binary from Go source code (if Go is available)
+- Or download a pre-built binary as fallback
 - Install it to `~/.mcs/bin/mcs`
-- Set up your PATH
+- Set up your PATH automatically
 - Configure shell completions
 
-☕ That's it! Just 1 bash scripts, and then just a clean Go binary.
+☕ That's it! One command and you get a clean Go binary.
 
 ## 🎮 How It Works
 
