@@ -139,7 +139,29 @@ clone_or_update_repo() {
         # Backup existing directory if it exists
         if [ -d "$MCS_HOME" ]; then
             warning "Backing up existing MCS directory..."
-            mv "$MCS_HOME" "${MCS_HOME}.backup.$(date +%Y%m%d_%H%M%S)"
+            
+            # Try to use Go backup command if mcs is already installed
+            if command -v mcs >/dev/null 2>&1 && mcs backup --help >/dev/null 2>&1; then
+                info "Using MCS backup system..."
+                if mcs backup create --type install --source "$MCS_HOME" --description "Pre-update backup"; then
+                    info "Backup created successfully"
+                else
+                    # Fallback to manual backup
+                    warning "MCS backup failed, using manual backup..."
+                    backup_dir="$HOME/.mcs.backup"
+                    mkdir -p "$backup_dir"
+                    backup_id="install-$(date +%Y%m%d_%H%M%S)"
+                    mv "$MCS_HOME" "$backup_dir/$backup_id"
+                    info "Manual backup created: $backup_dir/$backup_id"
+                fi
+            else
+                # No mcs command available, use manual backup
+                backup_dir="$HOME/.mcs.backup"
+                mkdir -p "$backup_dir"
+                backup_id="install-$(date +%Y%m%d_%H%M%S)"
+                mv "$MCS_HOME" "$backup_dir/$backup_id"
+                info "Manual backup created: $backup_dir/$backup_id"
+            fi
         fi
         
         # Clone with branch support

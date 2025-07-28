@@ -58,6 +58,7 @@ Run AI agents without constraints, on your own hardware.`,
 		cli.UpdateCommand(),
 		cli.CleanupCommand(),
 		cli.DestroyCommand(),
+		cli.BackupCommand(),
 	)
 
 	// Customize help

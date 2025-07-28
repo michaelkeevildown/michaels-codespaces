@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/michaelkeevildown/mcs/internal/backup"
 	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
@@ -133,14 +134,20 @@ func performDestroy(keepDocker, skipBackup bool) error {
 		fmt.Println(dimStyle.Render("Backing up your codespace data..."))
 		fmt.Println()
 		
-		if err := createBackup(); err != nil {
+		// Create backup using BackupManager
+		backupManager := backup.NewBackupManager()
+		homeDir := os.Getenv("HOME")
+		codespacesDir := filepath.Join(homeDir, "codespaces")
+		
+		backupID, err := backupManager.CreateQuick(codespacesDir, backup.BackupTypeDestroy)
+		if err != nil {
 			// Don't fail, just warn
 			fmt.Println(warningStyle.Render("⚠️  Failed to create backup: " + err.Error()))
 			fmt.Println(dimStyle.Render("   Continuing without backup..."))
 		} else {
 			progress.Update("Created backup")
-			fmt.Println(successStyle.Render("✓ Backup created in ~/.mcs.backup"))
-			fmt.Println(dimStyle.Render("  Your data is safe and can be restored later"))
+			fmt.Println(successStyle.Render("✓ Backup created: " + backupID))
+			fmt.Println(dimStyle.Render("  Your data is safe in ~/.mcs.backup and can be restored later"))
 		}
 	}
 
@@ -386,28 +393,6 @@ func performDestroy(keepDocker, skipBackup bool) error {
 	return nil
 }
 
-func createBackup() error {
-	homeDir := os.Getenv("HOME")
-	codespacesDir := filepath.Join(homeDir, "codespaces")
-	backupDir := filepath.Join(homeDir, ".mcs.backup")
-
-	// Check if codespaces directory exists
-	if _, err := os.Stat(codespacesDir); os.IsNotExist(err) {
-		return nil // Nothing to backup
-	}
-
-	// Create backup directory with timestamp
-	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	backupPath := filepath.Join(backupDir, timestamp)
-
-	if err := os.MkdirAll(backupPath, 0755); err != nil {
-		return err
-	}
-
-	// Copy codespaces directory
-	cmd := exec.Command("cp", "-r", codespacesDir, backupPath)
-	return cmd.Run()
-}
 
 func removeAllContainers(client *docker.Client) error {
 	containers, err := client.ListContainers(context.Background(), "")
