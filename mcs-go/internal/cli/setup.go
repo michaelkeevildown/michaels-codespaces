@@ -956,7 +956,7 @@ func configureNetworkAccess() error {
 		ipMode = "localhost"
 		hostIP = "127.0.0.1"
 	} else if selected.Type == "local" {
-		ipMode = "specific"
+		ipMode = "custom"
 		hostIP = selected.IP
 	}
 	
