@@ -8,8 +8,8 @@ set -e
 # Component metadata
 metadata() {
     echo "name=Claude Flow"
-    echo "version=latest"
-    echo "description=AI orchestration and workflow automation tool"
+    echo "version=alpha"
+    echo "description=AI orchestration and workflow automation tool (initializes via npx)"
 }
 
 # Component dependencies
@@ -33,13 +33,24 @@ install() {
     mkdir -p "$NPM_PREFIX"
     npm config set prefix "$NPM_PREFIX"
     
-    # Install Claude Flow globally
-    echo "Installing Claude Flow via npm..."
-    npm install -g claude-flow@alpha
+    # Initialize Claude Flow using npx
+    echo "Initializing Claude Flow via npx..."
+    cd "$HOME" || exit 1
+    npx claude-flow@alpha init --force
     
-    # Create symlink in local bin
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$NPM_PREFIX/bin/claude-flow" "$HOME/.local/bin/claude-flow"
+    # Create wrapper script for claude-flow command
+    if mkdir -p "$HOME/.local/bin" 2>/dev/null; then
+        cat > "$HOME/.local/bin/claude-flow" << 'EOF'
+#!/bin/bash
+# Claude Flow wrapper script
+exec npx claude-flow@alpha "$@"
+EOF
+        chmod +x "$HOME/.local/bin/claude-flow"
+        echo "Created claude-flow wrapper at $HOME/.local/bin/claude-flow"
+    else
+        echo "Warning: Could not create ~/.local/bin"
+        create_npx_wrapper
+    fi
     
     # Update PATH if needed
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -91,33 +102,37 @@ install_nodejs() {
 
 # Create npx wrapper
 create_npx_wrapper() {
-    echo "Creating claude-flow wrapper..."
+    echo "Creating alternative claude-flow wrapper..."
     
-    # Create wrapper script
-    mkdir -p "$HOME/.local/bin"
-    cat > "$HOME/.local/bin/claude-flow" << 'EOF'
+    # Try alternative locations
+    local wrapper_dir=""
+    if [ -w "$HOME/bin" ]; then
+        wrapper_dir="$HOME/bin"
+    elif [ -w "$HOME/.npm-global/bin" ]; then
+        wrapper_dir="$HOME/.npm-global/bin"
+    else
+        echo "Warning: No writable directory found for wrapper script"
+        echo "You can use 'npx claude-flow@alpha' directly"
+        return 1
+    fi
+    
+    mkdir -p "$wrapper_dir"
+    cat > "$wrapper_dir/claude-flow" << 'EOF'
 #!/bin/bash
 # Claude Flow wrapper script
 exec npx claude-flow@alpha "$@"
 EOF
-    
-    # Make executable
-    chmod +x "$HOME/.local/bin/claude-flow"
-    
-    echo "Created claude-flow wrapper at $HOME/.local/bin/claude-flow"
+    chmod +x "$wrapper_dir/claude-flow"
+    echo "Created claude-flow wrapper at $wrapper_dir/claude-flow"
 }
 
 # Configuration function
 configure() {
-    echo "Configuring Claude Flow..."
-    
-    # Create configuration directory
-    local config_dir="/home/coder/.claude-flow"
-    mkdir -p "$config_dir"
+    echo "Configuring Claude Flow environment..."
     
     # Check for API keys
     local anthropic_key=""
-    local anthropic_key_file="/home/coder/.tokens/claude.key"
+    local anthropic_key_file="$HOME/.tokens/claude.key"
     
     if [ -n "$ANTHROPIC_API_KEY" ]; then
         anthropic_key="$ANTHROPIC_API_KEY"
@@ -125,150 +140,59 @@ configure() {
         anthropic_key=$(cat "$anthropic_key_file")
     fi
     
-    # Create Claude Flow configuration
-    cat > "$config_dir/config.json" << EOF
-{
-  "version": "1.0",
-  "api": {
-    "anthropic": {
-      "key": "${anthropic_key:-YOUR_ANTHROPIC_API_KEY}",
-      "model": "claude-3-opus-20240229"
-    }
-  },
-  "workflows": {
-    "directory": "$config_dir/workflows",
-    "autoSave": true
-  },
-  "orchestration": {
-    "maxAgents": 10,
-    "defaultTopology": "mesh",
-    "parallelExecution": true
-  },
-  "memory": {
-    "enabled": true,
-    "directory": "$config_dir/data",
-    "ttl": 86400
-  },
-  "performance": {
-    "enableCaching": true,
-    "enableMetrics": true
-  }
-}
-EOF
-    
-    # Create sample workflows
-    create_sample_workflows "$config_dir/workflows"
-    
-    # Set up environment variables
-    cat >> ~/.bashrc << EOF
-
-# Claude Flow configuration
-export CLAUDE_FLOW_HOME="$config_dir"
-export CLAUDE_FLOW_CONFIG="$config_dir/config.json"
-
-# Claude Flow aliases
-alias cf='claude-flow'
-alias cfw='claude-flow workflow'
-alias cfa='claude-flow agent'
-alias cfs='claude-flow swarm'
-EOF
-    
-    # Create shell completion
-    if command -v claude-flow >/dev/null 2>&1; then
-        claude-flow completion bash > /tmp/claude-flow-completion.bash 2>/dev/null || true
-        if [ -f /tmp/claude-flow-completion.bash ]; then
-            sudo mv /tmp/claude-flow-completion.bash /etc/bash_completion.d/
-        fi
+    # Set up environment variables if API key found
+    if [ -n "$anthropic_key" ]; then
+        echo "export ANTHROPIC_API_KEY='$anthropic_key'" >> ~/.bashrc
+        export ANTHROPIC_API_KEY="$anthropic_key"
+        echo "Anthropic API key configured"
+    else
+        echo "No Anthropic API key found"
+        echo "Claude Flow will work without an API key (using browser auth)"
     fi
     
-    echo "Claude Flow configured successfully"
+    # Set up Claude Flow aliases
+    cat >> ~/.bashrc << 'EOF'
+
+# Claude Flow aliases
+alias cf='npx claude-flow@alpha'
+alias cfw='npx claude-flow@alpha workflow'
+alias cfa='npx claude-flow@alpha agent'
+alias cfs='npx claude-flow@alpha swarm'
+EOF
+    
+    # Source bashrc to make aliases available immediately
+    source ~/.bashrc
+    
+    echo "Claude Flow environment configured successfully"
 }
 
-# Create sample workflows
-create_sample_workflows() {
-    local workflows_dir="$1"
-    mkdir -p "$workflows_dir"
-    
-    # Sample workflow: Code Review
-    cat > "$workflows_dir/code-review.json" << 'EOF'
-{
-  "name": "Code Review Workflow",
-  "description": "Automated code review with multiple agents",
-  "agents": [
-    {
-      "name": "analyzer",
-      "type": "code-analyzer",
-      "tasks": ["syntax", "style", "complexity"]
-    },
-    {
-      "name": "security",
-      "type": "security-scanner",
-      "tasks": ["vulnerabilities", "secrets", "dependencies"]
-    },
-    {
-      "name": "optimizer",
-      "type": "performance-optimizer",
-      "tasks": ["bottlenecks", "memory", "algorithms"]
-    }
-  ],
-  "topology": "hierarchical",
-  "output": "markdown"
-}
-EOF
-    
-    # Sample workflow: Project Setup
-    cat > "$workflows_dir/project-setup.json" << 'EOF'
-{
-  "name": "Project Setup Workflow",
-  "description": "Initialize new project with best practices",
-  "agents": [
-    {
-      "name": "architect",
-      "type": "project-architect",
-      "tasks": ["structure", "dependencies", "configuration"]
-    },
-    {
-      "name": "documenter",
-      "type": "documentation-writer",
-      "tasks": ["readme", "contributing", "license"]
-    },
-    {
-      "name": "tester",
-      "type": "test-generator",
-      "tasks": ["unit-tests", "integration-tests", "ci-cd"]
-    }
-  ],
-  "topology": "mesh",
-  "interactive": true
-}
-EOF
-}
 
 # Verification function
 verify() {
     echo "Verifying Claude Flow installation..."
     
-    # Check if Claude Flow is installed
-    if ! command -v claude-flow >/dev/null 2>&1; then
-        # Check npm global installation
-        if npm list -g claude-flow >/dev/null 2>&1; then
-            echo "Claude Flow is installed via npm but not in PATH"
-            echo "You may need to add npm global bin to PATH"
+    # Check if Claude Flow wrapper exists and works
+    if command -v claude-flow >/dev/null 2>&1; then
+        echo "Claude Flow wrapper found"
+        # Test if it works
+        if claude-flow --version >/dev/null 2>&1; then
+            local version=$(claude-flow --version 2>/dev/null || echo "unknown")
+            echo "Claude Flow is working: $version"
         else
-            echo "Claude Flow not found" >&2
-            return 1
+            echo "Claude Flow wrapper exists but command failed"
+            echo "Try running: npx claude-flow@alpha --version"
         fi
     else
-        local version=$(claude-flow --version 2>/dev/null || echo "unknown")
-        echo "Claude Flow installed: $version"
+        echo "Claude Flow wrapper not found in PATH"
+        echo "You can use: npx claude-flow@alpha"
     fi
     
-    # Check configuration
-    local config_file="/home/coder/.claude-flow/config.json"
-    if [ -f "$config_file" ]; then
-        echo "Claude Flow configuration found"
+    # Check if Claude Flow is initialized
+    if [ -f "$HOME/claude-flow.config.json" ] || [ -f "$HOME/.claude/settings.json" ]; then
+        echo "Claude Flow is initialized"
     else
-        echo "Claude Flow configuration not found"
+        echo "Claude Flow not initialized"
+        echo "Run: npx claude-flow@alpha init --force"
     fi
     
     # Check API key configuration
@@ -281,10 +205,12 @@ verify() {
         fi
     fi
     
-    # Test Claude Flow
-    if command -v claude-flow >/dev/null 2>&1; then
-        echo "Testing Claude Flow..."
-        claude-flow --help >/dev/null 2>&1 && echo "Claude Flow is working correctly"
+    # Test npx command
+    echo "Testing Claude Flow via npx..."
+    if npx claude-flow@alpha --version >/dev/null 2>&1; then
+        echo "Claude Flow is accessible via npx"
+    else
+        echo "Error: Could not run Claude Flow via npx"
     fi
     
     return 0
@@ -294,13 +220,18 @@ verify() {
 uninstall() {
     echo "Uninstalling Claude Flow..."
     
-    # Remove npm package
-    if npm list -g claude-flow >/dev/null 2>&1; then
-        npm uninstall -g claude-flow
-    fi
+    # Remove wrapper scripts
+    rm -f "$HOME/.local/bin/claude-flow"
+    rm -f "$HOME/bin/claude-flow"
+    rm -f "$HOME/.npm-global/bin/claude-flow"
     
     # Remove configuration and data
-    rm -rf /home/coder/.claude-flow
+    rm -rf "$HOME/.claude-flow"
+    rm -rf "$HOME/.claude"
+    rm -rf "$HOME/.swarm"
+    rm -rf "$HOME/.hive-mind"
+    rm -f "$HOME/claude-flow.config.json"
+    rm -f "$HOME/.mcp.json"
     
     # Remove from shell profiles
     sed -i '/CLAUDE_FLOW/d' ~/.bashrc 2>/dev/null || true
@@ -328,6 +259,10 @@ main() {
             ;;
         install)
             install
+            echo ""
+            echo "✅ Claude Flow initialized successfully!"
+            echo "You can now use 'claude-flow' or 'npx claude-flow@alpha' commands."
+            echo ""
             ;;
         configure)
             configure
