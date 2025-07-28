@@ -16,6 +16,8 @@ type ComposeConfig struct {
 	ContainerName string
 	CodespaceName string
 	Image         string
+	BuildContext  string // Path to dockerfiles directory
+	Dockerfile    string // Dockerfile name (e.g., Dockerfile.node)
 	Password      string
 	Ports         map[string]string // host:container
 	Environment   map[string]string
@@ -51,6 +53,11 @@ var languageImagesWithNode = map[string]string{
 const dockerComposeTemplate = `services:
   {{ .ContainerName }}:
     image: {{ .Image }}
+    {{- if .BuildContext }}
+    build:
+      context: {{ .BuildContext }}
+      dockerfile: {{ .Dockerfile }}
+    {{- end }}
     container_name: {{ .ContainerName }}
     restart: unless-stopped
     environment:
@@ -171,9 +178,15 @@ func GenerateInitScript(comps []components.Component) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// GetImageForLanguage returns the appropriate Docker image for a language
+// ImageInfo contains both the image name and dockerfile info
+type ImageInfo struct {
+	Image      string
+	Dockerfile string
+}
+
+// GetImageInfo returns the appropriate Docker image and dockerfile for a language
 // Now considers component requirements
-func GetImageForLanguage(language string, components []components.Component) string {
+func GetImageInfo(language string, components []components.Component) ImageInfo {
 	// Check if any selected component requires Node.js
 	needsNode := false
 	for _, comp := range components {
@@ -192,17 +205,45 @@ func GetImageForLanguage(language string, components []components.Component) str
 	
 	// Select appropriate image based on language and requirements
 	lang := strings.ToLower(language)
+	
+	// Determine dockerfile name
+	var dockerfile string
 	if needsNode {
-		if image, ok := languageImagesWithNode[lang]; ok {
-			return image
+		if lang == "node" {
+			dockerfile = "Dockerfile.node"
+		} else if lang != "generic" {
+			dockerfile = fmt.Sprintf("Dockerfile.%s-node", lang)
+		} else {
+			dockerfile = "Dockerfile.node"
 		}
-		return languageImagesWithNode["generic"]
+	} else {
+		if lang != "generic" {
+			dockerfile = fmt.Sprintf("Dockerfile.%s", lang)
+		} else {
+			dockerfile = "Dockerfile.base"
+		}
 	}
 	
-	if image, ok := languageImages[lang]; ok {
-		return image
+	// Get image name
+	var image string
+	if needsNode {
+		if img, ok := languageImagesWithNode[lang]; ok {
+			image = img
+		} else {
+			image = languageImagesWithNode["generic"]
+		}
+	} else {
+		if img, ok := languageImages[lang]; ok {
+			image = img
+		} else {
+			image = languageImages["generic"]
+		}
 	}
-	return languageImages["generic"]
+	
+	return ImageInfo{
+		Image:      image,
+		Dockerfile: dockerfile,
+	}
 }
 
 // GenerateEnvFile generates a .env file for the codespace

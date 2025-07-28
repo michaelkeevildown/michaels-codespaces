@@ -25,6 +25,7 @@ import (
 var (
 	// Add command style for verbose output
 	commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)
+	setupPreBuild bool
 )
 
 // SetupCommand creates the 'setup' command
@@ -51,6 +52,7 @@ func SetupCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&skipDeps, "skip-deps", false, "Skip dependency installation")
 	cmd.Flags().BoolVar(&skipGitHub, "skip-github", false, "Skip GitHub configuration")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show detailed command output")
+	cmd.Flags().BoolVar(&setupPreBuild, "prebuild", false, "Pre-build Docker images locally")
 
 	return cmd
 }
@@ -99,6 +101,18 @@ func runSetup(bootstrap, skipDeps, skipGitHub, verbose bool) error {
 		// Non-fatal
 		fmt.Println(warningStyle.Render("⚠️  Network configuration failed"))
 		fmt.Println("You can configure it later with: mcs update-ip")
+	}
+
+	// Pre-build Docker images if requested
+	if setupPreBuild {
+		fmt.Println()
+		fmt.Println(infoStyle.Render("🔨 Pre-building Docker images..."))
+		if err := preBuildDockerImages(); err != nil {
+			fmt.Println(warningStyle.Render("⚠️  Failed to pre-build some images"))
+			fmt.Println("Images will be built on first use")
+		} else {
+			fmt.Println(successStyle.Render("✓ All Docker images built successfully"))
+		}
 	}
 
 	// Success message
@@ -945,7 +959,7 @@ func configureNetworkAccess() error {
 	os.Stdout.Sync()
 	
 	// Read user choice with terminal-aware logic
-	choice, ok := readUserInput()
+	choice, ok := readUserInputTerminal()
 	if !ok {
 		// Can't get user input in non-interactive mode
 		// Default to localhost for safety
@@ -999,6 +1013,132 @@ func configureNetworkAccess() error {
 		fmt.Println("   Codespaces will be accessible from other devices on your network.")
 		fmt.Println("   Make sure you trust all devices on your network.")
 	}
+	
+	return nil
+}
+
+// readUserInputTerminal reads user input with terminal awareness
+func readUserInputTerminal() (string, bool) {
+	var reader *bufio.Reader
+	
+	// Check if stdin is a terminal
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		// stdin is not a terminal (e.g., piped input)
+		// Try to open /dev/tty directly to read from the actual terminal
+		tty, err := os.Open("/dev/tty")
+		if err != nil {
+			return "", false
+		}
+		defer tty.Close()
+		reader = bufio.NewReader(tty)
+	} else {
+		// Normal interactive mode
+		reader = bufio.NewReader(os.Stdin)
+	}
+	
+	response, _ := reader.ReadString('\n')
+	return strings.TrimSpace(response), true
+}
+
+func preBuildDockerImages() error {
+	// Install dockerfiles first
+	dockerfilesPath := config.GetDockerfilesPath()
+	if err := os.MkdirAll(dockerfilesPath, 0755); err != nil {
+		return fmt.Errorf("failed to create dockerfiles directory: %w", err)
+	}
+
+	// Copy dockerfiles from source
+	sourcePath := filepath.Join(".", "dockerfiles")
+	if _, err := os.Stat(sourcePath); err == nil {
+		// Copy all dockerfiles
+		entries, err := os.ReadDir(sourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to read dockerfiles: %w", err)
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "Dockerfile") {
+				src := filepath.Join(sourcePath, entry.Name())
+				dst := filepath.Join(dockerfilesPath, entry.Name())
+				
+				// Read source file
+				content, err := os.ReadFile(src)
+				if err != nil {
+					continue
+				}
+				
+				// Write to destination
+				if err := os.WriteFile(dst, content, 0644); err != nil {
+					continue
+				}
+			}
+		}
+		fmt.Println(successStyle.Render("✓ Dockerfiles installed"))
+	} else {
+		return fmt.Errorf("dockerfiles not found in source directory")
+	}
+
+	// List of images to build
+	images := []struct {
+		dockerfile string
+		tag        string
+		name       string
+	}{
+		{"Dockerfile.base", "mcs/code-server-base:latest", "Base image"},
+		{"Dockerfile.node", "mcs/code-server-node:latest", "Node.js image"},
+		{"Dockerfile.python", "mcs/code-server-python:latest", "Python image"},
+		{"Dockerfile.python-node", "mcs/code-server-python-node:latest", "Python + Node.js image"},
+		{"Dockerfile.go", "mcs/code-server-go:latest", "Go image"},
+		{"Dockerfile.go-node", "mcs/code-server-go-node:latest", "Go + Node.js image"},
+		{"Dockerfile.full", "mcs/code-server-full:latest", "Full multi-language image"},
+	}
+
+	// Build each image using docker-compose
+	for _, img := range images {
+		fmt.Printf("Building %s... ", img.name)
+		
+		dockerfilePath := filepath.Join(dockerfilesPath, img.dockerfile)
+		if _, err := os.Stat(dockerfilePath); os.IsNotExist(err) {
+			fmt.Println(warningStyle.Render("SKIP (dockerfile not found)"))
+			continue
+		}
+		
+		// Create temporary docker-compose file for building
+		composeContent := fmt.Sprintf(`services:
+  build:
+    image: %s
+    build:
+      context: %s
+      dockerfile: %s
+`, img.tag, dockerfilesPath, img.dockerfile)
+		
+		tmpFile := filepath.Join(os.TempDir(), "mcs-build-compose.yml")
+		if err := os.WriteFile(tmpFile, []byte(composeContent), 0644); err != nil {
+			fmt.Println(errorStyle.Render("FAILED"))
+			continue
+		}
+		defer os.Remove(tmpFile)
+		
+		// Build using docker-compose
+		cmd := exec.Command("docker", "compose", "-f", tmpFile, "build")
+		cmd.Env = append(os.Environ(), "DOCKER_BUILDKIT=1")
+		
+		// Capture output
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Println(errorStyle.Render("FAILED"))
+			if len(output) > 0 {
+				fmt.Println(string(output))
+			}
+			continue
+		}
+		
+		fmt.Println(successStyle.Render("OK"))
+	}
+	
+	// Show summary
+	fmt.Println()
+	fmt.Println(infoStyle.Render("Images are now available locally and will not be pulled from Docker Hub"))
 	
 	return nil
 }

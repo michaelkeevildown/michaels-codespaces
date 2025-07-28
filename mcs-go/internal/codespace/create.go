@@ -75,10 +75,16 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 
 	// Prepare Docker configuration
 	reportProgress("Generating Docker configuration")
+	
+	// Get image info based on language and components
+	imageInfo := docker.GetImageInfo(language, opts.Components)
+	
 	dockerConfig := docker.ComposeConfig{
 		ContainerName: fmt.Sprintf("%s-dev", opts.Name),
 		CodespaceName: opts.Name,
-		Image:         docker.GetImageForLanguage(language, opts.Components),
+		Image:         imageInfo.Image,
+		BuildContext:  config.GetDockerfilesPath(),
+		Dockerfile:    imageInfo.Dockerfile,
 		Password:      password,
 		Ports: map[string]string{
 			fmt.Sprintf("%d", allocatedPorts["vscode"]): "8080",
