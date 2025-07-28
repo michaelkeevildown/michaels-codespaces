@@ -28,14 +28,23 @@ install() {
         install_nodejs
     fi
     
-    # Install Claude Code globally via npm
-    echo "Installing Claude Code via npm..."
-    npm install -g claude-code@latest
+    # Set up npm prefix for local installation
+    export NPM_PREFIX="$HOME/.npm-global"
+    mkdir -p "$NPM_PREFIX"
+    npm config set prefix "$NPM_PREFIX"
     
-    # Alternative: Install via npx if npm global install fails
-    if ! command -v claude-code >/dev/null 2>&1; then
-        echo "Creating claude-code wrapper for npx..."
-        create_npx_wrapper
+    # Install Claude Code locally
+    echo "Installing Claude Code via npm..."
+    npm install claude-code@latest
+    
+    # Create symlink in local bin
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$NPM_PREFIX/bin/claude-code" "$HOME/.local/bin/claude-code"
+    
+    # Update PATH if needed
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        export PATH="$HOME/.local/bin:$PATH"
     fi
 }
 
@@ -43,12 +52,14 @@ install() {
 install_nodejs() {
     if command -v apt-get >/dev/null 2>&1; then
         # Debian/Ubuntu
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
+        echo "Error: Node.js is required but not installed."
+        echo "Please ask your administrator to install Node.js."
+        return 1
     elif command -v yum >/dev/null 2>&1; then
         # RHEL/CentOS
-        curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-        sudo yum install -y nodejs
+        echo "Error: Node.js is required but not installed."
+        echo "Please ask your administrator to install Node.js."
+        return 1
     else
         # Manual installation
         echo "Installing Node.js manually..."
@@ -67,8 +78,11 @@ install_nodejs() {
         local url="https://nodejs.org/dist/${node_version}/node-${node_version}-linux-${arch}.tar.xz"
         
         curl -fsSL "$url" | tar -xJ -C /tmp
-        sudo cp -r /tmp/node-${node_version}-linux-${arch}/* /usr/local/
+        mkdir -p "$HOME/.local"
+        cp -r /tmp/node-${node_version}-linux-${arch}/* "$HOME/.local/"
         rm -rf /tmp/node-${node_version}-linux-${arch}
+        export PATH="$HOME/.local/bin:$PATH"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
     fi
 }
 
@@ -77,16 +91,17 @@ create_npx_wrapper() {
     echo "Creating claude-code wrapper..."
     
     # Create wrapper script
-    sudo tee /usr/local/bin/claude-code > /dev/null << 'EOF'
+    mkdir -p "$HOME/.local/bin"
+    cat > "$HOME/.local/bin/claude-code" << 'EOF'
 #!/bin/bash
 # Claude Code wrapper script
 exec npx claude-code@latest "$@"
 EOF
     
     # Make executable
-    sudo chmod +x /usr/local/bin/claude-code
+    chmod +x "$HOME/.local/bin/claude-code"
     
-    echo "Created claude-code wrapper at /usr/local/bin/claude-code"
+    echo "Created claude-code wrapper at $HOME/.local/bin/claude-code"
 }
 
 # Configuration function
@@ -184,8 +199,8 @@ uninstall() {
     fi
     
     # Remove wrapper script
-    if [ -f /usr/local/bin/claude-code ]; then
-        sudo rm -f /usr/local/bin/claude-code
+    if [ -f "$HOME/.local/bin/claude-code" ]; then
+        rm -f "$HOME/.local/bin/claude-code"
     fi
     
     # Remove configuration

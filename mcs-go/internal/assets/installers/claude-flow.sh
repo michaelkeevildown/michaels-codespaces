@@ -28,14 +28,23 @@ install() {
         install_nodejs
     fi
     
-    # Install Claude Flow via npm (using alpha version)
-    echo "Installing Claude Flow via npm..."
-    npm install -g claude-flow@alpha
+    # Set up npm prefix for local installation
+    export NPM_PREFIX="$HOME/.npm-global"
+    mkdir -p "$NPM_PREFIX"
+    npm config set prefix "$NPM_PREFIX"
     
-    # Alternative: Create npx wrapper if npm global install fails
-    if ! command -v claude-flow >/dev/null 2>&1; then
-        echo "Creating claude-flow wrapper for npx..."
-        create_npx_wrapper
+    # Install Claude Flow locally
+    echo "Installing Claude Flow via npm..."
+    npm install claude-flow@alpha
+    
+    # Create symlink in local bin
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$NPM_PREFIX/bin/claude-flow" "$HOME/.local/bin/claude-flow"
+    
+    # Update PATH if needed
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        export PATH="$HOME/.local/bin:$PATH"
     fi
     
     # Create Claude Flow directories
@@ -46,12 +55,14 @@ install() {
 install_nodejs() {
     if command -v apt-get >/dev/null 2>&1; then
         # Debian/Ubuntu
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt-get install -y nodejs
+        echo "Error: Node.js is required but not installed."
+        echo "Please ask your administrator to install Node.js."
+        return 1
     elif command -v yum >/dev/null 2>&1; then
         # RHEL/CentOS
-        curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-        sudo yum install -y nodejs
+        echo "Error: Node.js is required but not installed."
+        echo "Please ask your administrator to install Node.js."
+        return 1
     else
         # Manual installation
         echo "Installing Node.js manually..."
@@ -70,8 +81,11 @@ install_nodejs() {
         local url="https://nodejs.org/dist/${node_version}/node-${node_version}-linux-${arch}.tar.xz"
         
         curl -fsSL "$url" | tar -xJ -C /tmp
-        sudo cp -r /tmp/node-${node_version}-linux-${arch}/* /usr/local/
+        mkdir -p "$HOME/.local"
+        cp -r /tmp/node-${node_version}-linux-${arch}/* "$HOME/.local/"
         rm -rf /tmp/node-${node_version}-linux-${arch}
+        export PATH="$HOME/.local/bin:$PATH"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
     fi
 }
 
@@ -80,16 +94,17 @@ create_npx_wrapper() {
     echo "Creating claude-flow wrapper..."
     
     # Create wrapper script
-    sudo tee /usr/local/bin/claude-flow > /dev/null << 'EOF'
+    mkdir -p "$HOME/.local/bin"
+    cat > "$HOME/.local/bin/claude-flow" << 'EOF'
 #!/bin/bash
 # Claude Flow wrapper script
 exec npx claude-flow@alpha "$@"
 EOF
     
     # Make executable
-    sudo chmod +x /usr/local/bin/claude-flow
+    chmod +x "$HOME/.local/bin/claude-flow"
     
-    echo "Created claude-flow wrapper at /usr/local/bin/claude-flow"
+    echo "Created claude-flow wrapper at $HOME/.local/bin/claude-flow"
 }
 
 # Configuration function

@@ -39,48 +39,22 @@ install() {
             ;;
     esac
     
-    # Install based on available package manager
-    if command -v apt-get >/dev/null 2>&1; then
-        install_debian
-    elif command -v yum >/dev/null 2>&1; then
-        install_rhel
-    elif command -v apk >/dev/null 2>&1; then
-        install_alpine
-    else
-        install_binary
-    fi
+    # Always use binary installation for non-root environments
+    install_binary
 }
 
-# Install on Debian/Ubuntu
+# Install on Debian/Ubuntu (kept for reference but not used)
 install_debian() {
-    echo "Installing GitHub CLI via apt..."
-    
-    # Install dependencies
-    echo "→ Updating package list..."
-    apt-get update
-    echo "→ Installing prerequisites: curl gpg sudo..."
-    apt-get install -y curl gpg sudo
-    
-    # Add GitHub CLI repository
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-    
-    # Install gh
-    echo "→ Updating package list with GitHub CLI repository..."
-    apt-get update
-    echo "→ Installing GitHub CLI..."
-    apt-get install -y gh
+    echo "Package manager installation requires root privileges."
+    echo "Falling back to binary installation..."
+    install_binary
 }
 
-# Install on RHEL/CentOS/Fedora
+# Install on RHEL/CentOS/Fedora (kept for reference but not used)
 install_rhel() {
-    echo "Installing GitHub CLI via yum..."
-    
-    # Add repository
-    yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-    
-    # Install gh
-    yum install -y gh
+    echo "Package manager installation requires root privileges."
+    echo "Falling back to binary installation..."
+    install_binary
 }
 
 # Install on Alpine
@@ -116,9 +90,19 @@ install_binary() {
     # Download and install
     local url="https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_${arch}.tar.gz"
     
+    # Create local bin directory
+    mkdir -p "$HOME/.local/bin"
+    
+    # Download and extract to user directory
     curl -fsSL "$url" | tar -xz -C /tmp
-    sudo mv "/tmp/gh_${version}_linux_${arch}/bin/gh" /usr/local/bin/
-    sudo chmod +x /usr/local/bin/gh
+    mv "/tmp/gh_${version}_linux_${arch}/bin/gh" "$HOME/.local/bin/"
+    chmod +x "$HOME/.local/bin/gh"
+    
+    # Update PATH if needed
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
     
     # Cleanup
     rm -rf "/tmp/gh_${version}_linux_${arch}"
@@ -215,7 +199,7 @@ uninstall() {
     elif command -v yum >/dev/null 2>&1 && rpm -q gh >/dev/null 2>&1; then
         yum remove -y gh
     elif [ -f /usr/local/bin/gh ]; then
-        sudo rm -f /usr/local/bin/gh
+        rm -f "$HOME/.local/bin/gh"
     fi
     
     # Remove auth config
