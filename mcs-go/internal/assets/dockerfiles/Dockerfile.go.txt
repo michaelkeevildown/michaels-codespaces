@@ -20,16 +20,20 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/home/coder/go"
 ENV PATH="${GOPATH}/bin:${PATH}"
 
+# Create Go workspace directories with proper ownership
+RUN mkdir -p /home/coder/go/bin /home/coder/go/src /home/coder/go/pkg && \
+    chown -R coder:coder /home/coder/go
+
 # Install Go tools
 RUN go install golang.org/x/tools/gopls@latest && \
     go install github.com/go-delve/delve/cmd/dlv@latest && \
     go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
+# Fix ownership of installed tools
+RUN chown -R coder:coder /home/coder/go
+
 # Switch back to coder user
 USER coder
-
-# Set up Go workspace
-RUN mkdir -p ~/go/bin ~/go/src ~/go/pkg
 
 # Verify installation
 RUN go version

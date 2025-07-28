@@ -38,10 +38,17 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/home/coder/go"
 ENV PATH="${GOPATH}/bin:${PATH}"
 
+# Create Go workspace directories with proper ownership
+RUN mkdir -p /home/coder/go/bin /home/coder/go/src /home/coder/go/pkg && \
+    chown -R coder:coder /home/coder/go
+
 # Install language-specific tools
 RUN pip3 install --upgrade pip virtualenv pipenv poetry && \
     npm install -g yarn pnpm typescript nodemon && \
     go install golang.org/x/tools/gopls@latest
+
+# Fix ownership of installed Go tools
+RUN chown -R coder:coder /home/coder/go
 
 # Install Java (OpenJDK)
 RUN apt-get update && apt-get install -y \
@@ -54,8 +61,7 @@ RUN apt-get update && apt-get install -y \
 USER coder
 
 # Set up environments
-RUN mkdir -p ~/go/bin ~/go/src ~/go/pkg && \
-    npm config set prefix "$HOME/.npm-global" && \
+RUN npm config set prefix "$HOME/.npm-global" && \
     mkdir -p ~/.local/bin ~/.local/share ~/.npm-global/bin && \
     echo 'alias python=python3' >> ~/.bashrc && \
     echo 'alias pip=pip3' >> ~/.bashrc

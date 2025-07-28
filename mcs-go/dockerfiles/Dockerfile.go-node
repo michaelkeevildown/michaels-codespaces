@@ -25,9 +25,16 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/home/coder/go"
 ENV PATH="${GOPATH}/bin:${PATH}"
 
+# Create Go workspace directories with proper ownership
+RUN mkdir -p /home/coder/go/bin /home/coder/go/src /home/coder/go/pkg && \
+    chown -R coder:coder /home/coder/go
+
 # Install Go tools
 RUN go install golang.org/x/tools/gopls@latest && \
     go install github.com/go-delve/delve/cmd/dlv@latest
+
+# Fix ownership of installed tools
+RUN chown -R coder:coder /home/coder/go
 
 # Install common npm packages
 RUN npm install -g \
@@ -38,9 +45,8 @@ RUN npm install -g \
 # Switch back to coder user
 USER coder
 
-# Set up workspaces
-RUN mkdir -p ~/go/bin ~/go/src ~/go/pkg && \
-    npm config set prefix "$HOME/.npm-global" && \
+# Set up npm workspace
+RUN npm config set prefix "$HOME/.npm-global" && \
     mkdir -p ~/.local/bin ~/.local/share ~/.npm-global/bin
 
 # Verify installations
