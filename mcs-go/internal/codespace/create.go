@@ -205,17 +205,39 @@ func createDirectoryStructure(basePath string, hasComponents bool) error {
 
 // cloneRepository clones the repository with progress tracking
 func cloneRepository(ctx context.Context, url, path string, depth int) error {
+	// Set default depth if not specified
+	if depth == 0 {
+		depth = 1 // Shallow clone by default for faster cloning
+	}
+	
+	fmt.Printf("Cloning repository from: %s\n", url)
+	fmt.Printf("Destination path: %s\n", path)
+	fmt.Printf("Clone depth: %d\n", depth)
+	
 	cloneOpts := git.CloneOptions{
 		URL:   url,
 		Path:  path,
 		Depth: depth,
 		Progress: func(msg string) {
-			// TODO: Hook this up to UI progress
-			fmt.Printf("  %s\n", msg)
+			// Print progress messages
+			if msg != "" {
+				fmt.Printf("  Clone progress: %s\n", msg)
+			}
 		},
 	}
 
-	return git.Clone(ctx, cloneOpts)
+	err := git.Clone(ctx, cloneOpts)
+	if err != nil {
+		return fmt.Errorf("git clone failed: %w", err)
+	}
+	
+	// Verify clone succeeded
+	if _, err := os.Stat(filepath.Join(path, ".git")); err != nil {
+		return fmt.Errorf("clone verification failed - .git directory not found: %w", err)
+	}
+	
+	fmt.Println("Repository cloned successfully")
+	return nil
 }
 
 // detectLanguage attempts to detect the primary language of the project

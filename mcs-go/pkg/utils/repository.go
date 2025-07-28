@@ -45,11 +45,12 @@ func ParseRepository(input string) (*Repository, error) {
 	}
 
 	// Handle git@ URLs
+	originalInput := input
 	if strings.HasPrefix(input, "git@") {
-		// Convert git@github.com:user/repo.git to https://github.com/user/repo
+		// Convert git@github.com:user/repo.git to https://github.com/user/repo.git for parsing
+		// but we'll keep the original git@ URL for cloning
 		input = strings.Replace(input, ":", "/", 1)
 		input = strings.Replace(input, "git@", "https://", 1)
-		input = strings.TrimSuffix(input, ".git")
 	}
 
 	// Parse as URL
@@ -64,8 +65,16 @@ func ParseRepository(input string) (*Repository, error) {
 		return nil, fmt.Errorf("invalid repository path: %s", u.Path)
 	}
 
+	// Keep the original URL for cloning (don't remove .git suffix)
+	// but remove it from the Name field for display purposes
+	// For git@ URLs, use the original format
+	repoURL := input
+	if strings.HasPrefix(originalInput, "git@") {
+		repoURL = originalInput
+	}
+	
 	return &Repository{
-		URL:   strings.TrimSuffix(input, ".git"),
+		URL:   repoURL,
 		Host:  u.Host,
 		Owner: pathParts[0],
 		Name:  strings.TrimSuffix(pathParts[1], ".git"),
