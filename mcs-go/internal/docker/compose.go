@@ -68,8 +68,8 @@ const dockerComposeTemplate = `services:
       {{ $key }}: "{{ $value }}"
       {{- end }}
     working_dir: /home/coder/{{ .CodespaceName }}
-    command: >
-      sh -c "
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "
         {{- if .Components }}
         # Install components
         if [ -f /docker-entrypoint-initdb.d/init.sh ]; then
@@ -80,7 +80,7 @@ const dockerComposeTemplate = `services:
         {{- end }}
         # Start code-server
         code-server --bind-addr 0.0.0.0:8080 --auth password
-      "
+      "]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
