@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -157,7 +158,19 @@ func checkAndInstallDependencies() error {
 			fmt.Println("Please install Docker Desktop from: https://www.docker.com/products/docker-desktop")
 		}
 	} else {
-		fmt.Println(successStyle.Render("✓ Docker found"))
+		// Docker command exists, but check if it's actually working
+		fmt.Println(infoStyle.Render("Docker found, checking if it's working..."))
+		cmd := exec.Command("docker", "version")
+		if err := cmd.Run(); err != nil {
+			fmt.Println(warningStyle.Render("⚠️  Docker is installed but not working properly"))
+			fmt.Println("Please ensure Docker daemon is running")
+			if runtime.GOOS == "linux" {
+				fmt.Println("Try: sudo systemctl start docker")
+			}
+			// Don't fail setup, just warn
+		} else {
+			fmt.Println(successStyle.Render("✓ Docker is installed and working"))
+		}
 	}
 
 	// Check Git
@@ -599,16 +612,48 @@ func installDockerLinux() error {
 	progress := ui.NewProgress()
 	progress.Start("Installing Docker")
 
-	// Install prerequisites
-	cmd := exec.Command("sudo", "apt-get", "update")
+	// Create context with timeout for the entire installation
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// Set non-interactive environment for all apt commands
+	env := append(os.Environ(),
+		"DEBIAN_FRONTEND=noninteractive",
+		"NEEDRESTART_MODE=a",
+		"NEEDRESTART_SUSPEND=1",
+	)
+
+	// Update package list with progress
+	progress.Update("Updating package list...")
+	fmt.Println(dimStyle.Render("This may take a moment..."))
+	
+	cmd := exec.CommandContext(ctx, "sudo", "apt-get", "update", "-qq")
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			progress.Fail("Package update timed out")
+			return fmt.Errorf("apt-get update timed out after 10 minutes")
+		}
 		progress.Fail("Failed to update package list")
 		return err
 	}
 
-	cmd = exec.Command("sudo", "apt-get", "install", "-y", 
+	// Install prerequisites
+	progress.Update("Installing prerequisites...")
+	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y", "-qq",
+		"--no-install-recommends",
 		"ca-certificates", "curl", "gnupg", "lsb-release", "gpg")
+	cmd.Env = env
+	// Show output for debugging
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			progress.Fail("Prerequisites installation timed out")
+			return fmt.Errorf("prerequisites installation timed out")
+		}
 		progress.Fail("Failed to install prerequisites")
 		return err
 	}
@@ -707,36 +752,66 @@ func installDockerLinux() error {
 	}
 
 	// Install Docker
-	progress.Update("Installing Docker packages")
-	cmd = exec.Command("sudo", "apt-get", "update")
+	progress.Update("Installing Docker packages...")
+	fmt.Println(dimStyle.Render("Note: This may remove old Docker versions if present"))
+	
+	// Update package list again after adding Docker repo
+	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "update", "-qq")
+	cmd.Env = env
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			progress.Fail("Package update timed out")
+			return fmt.Errorf("apt-get update timed out")
+		}
 		progress.Fail("Failed to update package list")
 		return err
 	}
 
-	cmd = exec.Command("sudo", "apt-get", "install", "-y",
+	// Install Docker with non-interactive flags
+	cmd = exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y",
+		"--no-install-recommends",
+		"--allow-downgrades",
+		"--allow-remove-essential",
+		"--allow-change-held-packages",
+		"-o", "Dpkg::Options::=--force-confdef",
+		"-o", "Dpkg::Options::=--force-confold",
 		"docker-ce", "docker-ce-cli", "containerd.io", 
 		"docker-buildx-plugin", "docker-compose-plugin")
+	cmd.Env = env
+	// Show output so we can see what's happening
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			progress.Fail("Docker installation timed out")
+			fmt.Println(errorStyle.Render("Installation timed out after 10 minutes"))
+			fmt.Println(infoStyle.Render("You may need to run 'sudo apt-get -f install' to fix any issues"))
+			return fmt.Errorf("Docker installation timed out")
+		}
 		progress.Fail("Failed to install Docker")
 		return err
 	}
 
 	// Start Docker
 	progress.Update("Starting Docker service")
-	cmd = exec.Command("sudo", "systemctl", "start", "docker")
+	cmd = exec.CommandContext(ctx, "sudo", "systemctl", "start", "docker")
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			progress.Fail("Starting Docker timed out")
+			return fmt.Errorf("starting Docker service timed out")
+		}
 		progress.Fail("Failed to start Docker")
 		return err
 	}
 
-	cmd = exec.Command("sudo", "systemctl", "enable", "docker")
+	cmd = exec.CommandContext(ctx, "sudo", "systemctl", "enable", "docker")
 	cmd.Run() // Don't fail if this doesn't work
 
 	// Add user to docker group
 	progress.Update("Adding user to docker group")
 	user := os.Getenv("USER")
-	cmd = exec.Command("sudo", "usermod", "-aG", "docker", user)
+	cmd = exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", user)
 	if err := cmd.Run(); err != nil {
 		progress.Fail("Failed to add user to docker group")
 		fmt.Println(warningStyle.Render("You may need to log out and back in for docker permissions"))
