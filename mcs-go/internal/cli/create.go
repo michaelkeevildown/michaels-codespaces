@@ -124,17 +124,22 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 	// Create a new codespace manager
 	manager := codespace.NewManager()
 	
-	// The actual Create method will handle all these steps internally:
-	// 1. Creating directory structure
-	// 2. Cloning repository
-	// 3. Detecting project type
-	// 4. Generating Docker configuration
-	// 5. Setting up components
-	// 6. Starting services (if not --no-start)
+	// Track the last message to show success for each step
+	var lastMessage string
 	
-	// Since the Create method doesn't expose granular progress,
-	// we'll show a general progress message
-	progress.Start("Creating codespace")
+	// Add progress callback to options
+	opts.Progress = func(message string) {
+		// If we had a previous message, mark it as successful
+		if lastMessage != "" {
+			progress.Success(lastMessage)
+			// Create a new progress instance for the next step
+			progress = ui.NewProgress()
+		}
+		
+		// Update the progress UI with the new step
+		progress.Start(message)
+		lastMessage = message
+	}
 	
 	// Call the actual Create method which does all the work
 	cs, err := manager.Create(ctx, opts)
@@ -143,7 +148,10 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 		return nil, err
 	}
 	
-	progress.Success("Codespace created")
+	// Mark the last step as successful
+	if lastMessage != "" {
+		progress.Success(lastMessage)
+	}
 	
 	return cs, nil
 }

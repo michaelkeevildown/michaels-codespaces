@@ -20,6 +20,13 @@ import (
 
 // Create creates a new codespace
 func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, error) {
+	// Helper function for progress reporting
+	reportProgress := func(msg string) {
+		if opts.Progress != nil {
+			opts.Progress(msg)
+		}
+	}
+
 	// Validate options
 	if err := opts.Validate(); err != nil {
 		return nil, err
@@ -32,11 +39,13 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 	}
 
 	// Create directory structure
+	reportProgress("Creating directory structure")
 	if err := createDirectoryStructure(codespaceDir, len(opts.Components) > 0); err != nil {
 		return nil, fmt.Errorf("failed to create directories: %w", err)
 	}
 
 	// Clone repository
+	reportProgress("Cloning repository")
 	if err := cloneRepository(ctx, opts.Repository.URL, filepath.Join(codespaceDir, "src"), opts.CloneDepth); err != nil {
 		// Clean up on failure
 		os.RemoveAll(codespaceDir)
@@ -44,9 +53,11 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 	}
 
 	// Detect language/framework
+	reportProgress("Detecting project type")
 	language := detectLanguage(filepath.Join(codespaceDir, "src"))
 
 	// Allocate ports
+	reportProgress("Allocating ports")
 	portRegistry, err := ports.NewPortRegistry()
 	if err != nil {
 		os.RemoveAll(codespaceDir)
@@ -63,6 +74,7 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 	password := generatePassword()
 
 	// Prepare Docker configuration
+	reportProgress("Generating Docker configuration")
 	dockerConfig := docker.ComposeConfig{
 		ContainerName: fmt.Sprintf("%s-dev", opts.Name),
 		CodespaceName: opts.Name,
@@ -109,6 +121,7 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 
 	// Setup components if any
 	if len(opts.Components) > 0 {
+		reportProgress("Setting up components")
 		if err := setupComponents(codespaceDir, opts.Components); err != nil {
 			portRegistry.ReleaseCodespacePorts(opts.Name)
 			os.RemoveAll(codespaceDir)
@@ -117,6 +130,7 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 	}
 
 	// Create Docker network
+	reportProgress("Creating Docker network")
 	dockerClient, err := docker.NewClient()
 	if err != nil {
 		portRegistry.ReleaseCodespacePorts(opts.Name)
@@ -158,6 +172,7 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 	}
 
 	// Save metadata
+	reportProgress("Saving metadata")
 	if err := m.SaveMetadata(cs); err != nil {
 		portRegistry.ReleaseCodespacePorts(opts.Name)
 		os.RemoveAll(codespaceDir)
@@ -166,6 +181,7 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 
 	// Start container if requested
 	if !opts.NoStart {
+		reportProgress("Starting services")
 		if err := m.Start(ctx, opts.Name); err != nil {
 			// Don't fail creation if start fails
 			fmt.Printf("Warning: Failed to start codespace: %v\n", err)
@@ -210,19 +226,12 @@ func cloneRepository(ctx context.Context, url, path string, depth int) error {
 		depth = 1 // Shallow clone by default for faster cloning
 	}
 	
-	fmt.Printf("Cloning repository from: %s\n", url)
-	fmt.Printf("Destination path: %s\n", path)
-	fmt.Printf("Clone depth: %d\n", depth)
-	
 	cloneOpts := git.CloneOptions{
 		URL:   url,
 		Path:  path,
 		Depth: depth,
 		Progress: func(msg string) {
-			// Print progress messages
-			if msg != "" {
-				fmt.Printf("  Clone progress: %s\n", msg)
-			}
+			// Progress is now handled by the main progress tracker
 		},
 	}
 
@@ -236,7 +245,6 @@ func cloneRepository(ctx context.Context, url, path string, depth int) error {
 		return fmt.Errorf("clone verification failed - .git directory not found: %w", err)
 	}
 	
-	fmt.Println("Repository cloned successfully")
 	return nil
 }
 

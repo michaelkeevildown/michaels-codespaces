@@ -23,6 +23,9 @@ type Codespace struct {
 	VSCodePort int
 }
 
+// ProgressFunc is a callback for reporting progress
+type ProgressFunc func(message string)
+
 // CreateOptions holds options for creating a codespace
 type CreateOptions struct {
 	Name       string
@@ -30,6 +33,7 @@ type CreateOptions struct {
 	Components []components.Component
 	NoStart    bool
 	CloneDepth int
+	Progress   ProgressFunc
 }
 
 // GetPath returns the full path for the codespace
