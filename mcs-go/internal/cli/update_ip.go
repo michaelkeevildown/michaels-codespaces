@@ -6,10 +6,12 @@ import (
 	"net"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/config"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -182,9 +184,30 @@ func interactiveIPConfig() error {
 	fmt.Println("5) Show current configuration")
 	fmt.Println()
 	fmt.Print("Select option [1-5]: ")
+	os.Stdout.Sync()
 
-	reader := bufio.NewReader(os.Stdin)
-	choice, _ := reader.ReadString('\n')
+	// Read user choice with terminal-aware logic
+	var reader *bufio.Reader
+	var choice string
+	
+	// Check if stdin is a terminal
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		// stdin is not a terminal (e.g., piped input)
+		// Try to open /dev/tty directly to read from the actual terminal
+		tty, err := os.Open("/dev/tty")
+		if err != nil {
+			// Can't get user input in non-interactive mode
+			fmt.Println("(non-interactive mode - use flags instead)")
+			return fmt.Errorf("non-interactive mode detected, please use command flags")
+		}
+		defer tty.Close()
+		reader = bufio.NewReader(tty)
+	} else {
+		// Normal interactive mode
+		reader = bufio.NewReader(os.Stdin)
+	}
+	
+	choice, _ = reader.ReadString('\n')
 	choice = strings.TrimSpace(choice)
 
 	switch choice {

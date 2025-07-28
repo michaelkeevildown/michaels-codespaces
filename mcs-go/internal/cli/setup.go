@@ -885,10 +885,14 @@ func configureNetworkAccess() error {
 	fmt.Print("Select option (default: 1): ")
 	os.Stdout.Sync()
 	
-	// Read user choice
-	reader := bufio.NewReader(os.Stdin)
-	choice, _ := reader.ReadString('\n')
-	choice = strings.TrimSpace(choice)
+	// Read user choice with terminal-aware logic
+	choice, ok := readUserInput()
+	if !ok {
+		// Can't get user input in non-interactive mode
+		// Default to localhost for safety
+		fmt.Println("1 (non-interactive mode)")
+		choice = "1"
+	}
 	
 	// Default to localhost if no choice
 	if choice == "" {

@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // CleanupCommand creates the 'cleanup' command
@@ -34,8 +36,30 @@ This will:
 				fmt.Print("Are you sure? [y/N] ")
 				os.Stdout.Sync() // Ensure prompt is displayed
 
-				reader := bufio.NewReader(os.Stdin)
-				response, _ := reader.ReadString('\n')
+				// Read user choice with terminal-aware logic
+				var reader *bufio.Reader
+				var response string
+				
+				// Check if stdin is a terminal
+				if !term.IsTerminal(int(syscall.Stdin)) {
+					// stdin is not a terminal (e.g., piped input)
+					// Try to open /dev/tty directly to read from the actual terminal
+					tty, err := os.Open("/dev/tty")
+					if err != nil {
+						// Can't get user input in non-interactive mode
+						// Default to NO for safety
+						fmt.Println("n (non-interactive mode)")
+						fmt.Println("Cancelled.")
+						return nil
+					}
+					defer tty.Close()
+					reader = bufio.NewReader(tty)
+				} else {
+					// Normal interactive mode
+					reader = bufio.NewReader(os.Stdin)
+				}
+				
+				response, _ = reader.ReadString('\n')
 				response = strings.TrimSpace(strings.ToLower(response))
 				
 				// Show what was selected to fix cursor positioning

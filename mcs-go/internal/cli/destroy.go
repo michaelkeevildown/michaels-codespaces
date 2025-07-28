@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -25,9 +27,9 @@ var (
 // DestroyCommand creates the 'destroy' command
 func DestroyCommand() *cobra.Command {
 	var (
-		force        bool
-		keepDocker   bool
-		skipBackup   bool
+		force      bool
+		keepDocker bool
+		skipBackup bool
 	)
 
 	cmd := &cobra.Command{
@@ -62,15 +64,37 @@ Use 'mcs cleanup' for a soft removal that preserves codespaces.`,
 				fmt.Print("Type 'destroy' to confirm: ")
 				os.Stdout.Sync() // Ensure prompt is displayed
 
-				reader := bufio.NewReader(os.Stdin)
-				response, _ := reader.ReadString('\n')
+				// Read user choice with terminal-aware logic
+				var reader *bufio.Reader
+				var response string
+
+				// Check if stdin is a terminal
+				if !term.IsTerminal(int(syscall.Stdin)) {
+					// stdin is not a terminal (e.g., piped input)
+					// Try to open /dev/tty directly to read from the actual terminal
+					tty, err := os.Open("/dev/tty")
+					if err != nil {
+						// Can't get user input in non-interactive mode
+						// Default to NO/cancel for safety
+						fmt.Println("(non-interactive mode)")
+						fmt.Println("Cancelled.")
+						return nil
+					}
+					defer tty.Close()
+					reader = bufio.NewReader(tty)
+				} else {
+					// Normal interactive mode
+					reader = bufio.NewReader(os.Stdin)
+				}
+
+				response, _ = reader.ReadString('\n')
 				response = strings.TrimSpace(response)
-				
+
 				// Show what was typed to fix cursor positioning
 				if response == "" {
 					fmt.Println() // Just move to next line if nothing typed
 				}
-				
+
 				if response != "destroy" {
 					fmt.Println("Cancelled.")
 					return nil
@@ -84,7 +108,7 @@ Use 'mcs cleanup' for a soft removal that preserves codespaces.`,
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&keepDocker, "keep-docker", false, "Keep Docker installed")
 	cmd.Flags().BoolVar(&skipBackup, "skip-backup", false, "Skip backup of codespaces")
-	
+
 	return cmd
 }
 
@@ -106,13 +130,13 @@ func performDestroy(keepDocker, skipBackup bool) error {
 	dockerClient, err := docker.NewClient()
 	if err == nil {
 		progress.Update("Stopping all codespace containers")
-		
+
 		containers, err := dockerClient.ListContainers(context.Background(), "")
 		if err == nil {
 			for _, container := range containers {
 				// Only stop MCS containers
-				if strings.Contains(container.Name, "mcs-") || 
-				   strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
+				if strings.Contains(container.Name, "mcs-") ||
+					strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
 					if err := dockerClient.StopContainer(context.Background(), container.ID); err != nil {
 						fmt.Printf("Warning: Failed to stop container %s: %v\n", container.Name, err)
 					}
@@ -147,7 +171,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 	if mcsHome == "" {
 		mcsHome = filepath.Join(homeDir, ".mcs")
 	}
-	
+
 	if err := os.RemoveAll(mcsHome); err != nil {
 		fmt.Printf("Warning: Failed to remove MCS directory: %v\n", err)
 	}
@@ -158,7 +182,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 		filepath.Join(homeDir, ".local/bin/mcs"),
 		filepath.Join(homeDir, "bin/mcs"),
 	}
-	
+
 	for _, loc := range pathLocations {
 		if _, err := os.Stat(loc); err == nil {
 			os.Remove(loc)
@@ -185,7 +209,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 		filepath.Join(homeDir, "monitor-system.sh"),
 		filepath.Join(homeDir, ".mcs-install.sh"),
 	}
-	
+
 	for _, script := range scripts {
 		if _, err := os.Stat(script); err == nil {
 			os.Remove(script)
@@ -195,7 +219,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 	// 8. Optionally uninstall Docker
 	if !keepDocker {
 		progress.Update("Uninstalling Docker")
-		if err := uninstallDocker(); err != nil {
+		if err := uninstallDocker(progress); err != nil {
 			fmt.Printf("Warning: Failed to uninstall Docker: %v\n", err)
 			fmt.Println("You may need to uninstall Docker manually")
 		} else {
@@ -204,7 +228,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 	}
 
 	progress.Success("Destruction complete!")
-	
+
 	fmt.Println()
 	fmt.Println(destroyWarningStyle.Render("💥 MCS has been completely destroyed"))
 	fmt.Println()
@@ -217,13 +241,13 @@ func performDestroy(keepDocker, skipBackup bool) error {
 		fmt.Println("  ✓ Docker installation")
 	}
 	fmt.Println()
-	
+
 	if !skipBackup {
 		fmt.Println("Your codespace data was backed up to: ~/mcs-backup")
 		fmt.Println("You can safely delete this backup when no longer needed.")
 		fmt.Println()
 	}
-	
+
 	fmt.Println("Thank you for using MCS! 👋")
 
 	return nil
@@ -233,20 +257,20 @@ func createBackup() error {
 	homeDir := os.Getenv("HOME")
 	codespacesDir := filepath.Join(homeDir, "codespaces")
 	backupDir := filepath.Join(homeDir, "mcs-backup")
-	
+
 	// Check if codespaces directory exists
 	if _, err := os.Stat(codespacesDir); os.IsNotExist(err) {
 		return nil // Nothing to backup
 	}
-	
+
 	// Create backup directory with timestamp
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	backupPath := filepath.Join(backupDir, timestamp)
-	
+
 	if err := os.MkdirAll(backupPath, 0755); err != nil {
 		return err
 	}
-	
+
 	// Copy codespaces directory
 	cmd := exec.Command("cp", "-r", codespacesDir, backupPath)
 	return cmd.Run()
@@ -257,11 +281,11 @@ func removeAllContainers(client *docker.Client) error {
 	if err != nil {
 		return err
 	}
-	
+
 	for _, container := range containers {
 		// Only remove MCS containers
-		if strings.Contains(container.Name, "mcs-") || 
-		   strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
+		if strings.Contains(container.Name, "mcs-") ||
+			strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
 			// Force remove
 			cmd := exec.Command("docker", "rm", "-f", container.ID)
 			if err := cmd.Run(); err != nil {
@@ -270,11 +294,11 @@ func removeAllContainers(client *docker.Client) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
-func uninstallDocker() error {
+func uninstallDocker(progress *ui.Progress) error {
 	// Detect OS and uninstall accordingly
 	switch runtime.GOOS {
 	case "darwin":
@@ -284,12 +308,12 @@ func uninstallDocker() error {
 			// Stop Docker Desktop
 			exec.Command("osascript", "-e", "quit app \"Docker\"").Run()
 			time.Sleep(2 * time.Second)
-			
+
 			// Remove application
 			if err := os.RemoveAll(appPath); err != nil {
 				return err
 			}
-			
+
 			// Remove Docker data
 			homeDir := os.Getenv("HOME")
 			dockerDirs := []string{
@@ -298,28 +322,62 @@ func uninstallDocker() error {
 				filepath.Join(homeDir, "Library/Application Support/Docker Desktop"),
 				filepath.Join(homeDir, "Library/Group Containers/group.com.docker"),
 			}
-			
+
 			for _, dir := range dockerDirs {
 				os.RemoveAll(dir)
 			}
 		}
-		
+
 	case "linux":
+		// Stop the spinner before running sudo commands
+		progress.Stop()
+
 		// Try different package managers
 		if _, err := exec.LookPath("apt-get"); err == nil {
-			exec.Command("sudo", "apt-get", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io").Run()
-			exec.Command("sudo", "apt-get", "purge", "-y", "docker-ce", "docker-ce-cli", "containerd.io").Run()
+			// Remove Docker packages
+			cmd := exec.Command("sudo", "apt-get", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Run()
+
+			// Purge Docker packages
+			cmd = exec.Command("sudo", "apt-get", "purge", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Run()
 		} else if _, err := exec.LookPath("yum"); err == nil {
-			exec.Command("sudo", "yum", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io").Run()
+			cmd := exec.Command("sudo", "yum", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Run()
 		} else if _, err := exec.LookPath("dnf"); err == nil {
-			exec.Command("sudo", "dnf", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io").Run()
+			cmd := exec.Command("sudo", "dnf", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Run()
 		}
-		
+
 		// Remove Docker data
-		exec.Command("sudo", "rm", "-rf", "/var/lib/docker").Run()
-		exec.Command("sudo", "rm", "-rf", "/var/lib/containerd").Run()
+		cmd := exec.Command("sudo", "rm", "-rf", "/var/lib/docker")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Run()
+
+		cmd = exec.Command("sudo", "rm", "-rf", "/var/lib/containerd")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Run()
+
+		// Resume the spinner after sudo commands are done
+		progress.Resume()
 	}
-	
+
 	return nil
 }
 
@@ -346,9 +404,9 @@ func cleanShellConfigDestroy(configFile string) error {
 			strings.Contains(line, "mcs completion") ||
 			strings.Contains(line, "export MCS_") {
 			// Also skip the next line if it's an alias or export
-			if i+1 < len(lines) && 
-			   (strings.HasPrefix(strings.TrimSpace(lines[i+1]), "alias ") ||
-			    strings.HasPrefix(strings.TrimSpace(lines[i+1]), "export ")) {
+			if i+1 < len(lines) &&
+				(strings.HasPrefix(strings.TrimSpace(lines[i+1]), "alias ") ||
+					strings.HasPrefix(strings.TrimSpace(lines[i+1]), "export ")) {
 				skipNext = true
 			}
 			continue
