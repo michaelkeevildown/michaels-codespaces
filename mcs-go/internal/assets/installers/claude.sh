@@ -9,7 +9,7 @@ set -e
 metadata() {
     echo "name=Claude Code"
     echo "version=latest"
-    echo "description=Anthropic's Claude AI coding assistant (claude-code)"
+    echo "description=Anthropic's Claude AI coding assistant"
 }
 
 # Component dependencies
@@ -33,18 +33,24 @@ install() {
     mkdir -p "$NPM_PREFIX"
     npm config set prefix "$NPM_PREFIX"
     
-    # Install Claude Code locally
+    # Install Claude Code globally
     echo "Installing Claude Code via npm..."
-    npm install claude-code@latest
+    npm install -g @anthropic-ai/claude-code@latest
     
     # Create symlink in local bin
-    mkdir -p "$HOME/bin"
-    ln -sf "$NPM_PREFIX/bin/claude-code" "$HOME/bin/claude-code"
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$NPM_PREFIX/bin/claude" "$HOME/.local/bin/claude"
     
     # Update PATH if needed
-    if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
-        echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-        export PATH="$HOME/bin:$PATH"
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+    
+    # Also update npm global bin path
+    if [[ ":$PATH:" != *":$NPM_PREFIX/bin:"* ]]; then
+        echo 'export PATH="$NPM_PREFIX/bin:$PATH"' >> ~/.bashrc
+        export PATH="$NPM_PREFIX/bin:$PATH"
     fi
 }
 
@@ -81,8 +87,8 @@ install_nodejs() {
         mkdir -p "$HOME/.local"
         cp -r /tmp/node-${node_version}-linux-${arch}/* "$HOME/.local/"
         rm -rf /tmp/node-${node_version}-linux-${arch}
-        export PATH="$HOME/bin:$PATH"
-        echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+        export PATH="$HOME/.local/bin:$PATH"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
     fi
 }
 
@@ -91,17 +97,17 @@ create_npx_wrapper() {
     echo "Creating claude-code wrapper..."
     
     # Create wrapper script
-    mkdir -p "$HOME/bin"
-    cat > "$HOME/bin/claude-code" << 'EOF'
+    mkdir -p "$HOME/.local/bin"
+    cat > "$HOME/.local/bin/claude" << 'EOF'
 #!/bin/bash
 # Claude Code wrapper script
-exec npx claude-code@latest "$@"
+exec npx @anthropic-ai/claude-code@latest "$@"
 EOF
     
     # Make executable
-    chmod +x "$HOME/bin/claude-code"
+    chmod +x "$HOME/.local/bin/claude"
     
-    echo "Created claude-code wrapper at $HOME/bin/claude-code"
+    echo "Created claude wrapper at $HOME/.local/bin/claude"
 }
 
 # Configuration function
@@ -154,10 +160,12 @@ EOF
     cat >> ~/.bashrc << 'EOF'
 
 # Claude Code aliases
-alias claude='claude-code'
-alias cc='claude-code'
-alias ccd='claude-code --debug'
+alias cc='claude'
+alias ccd='claude --debug'
 EOF
+
+    # Source bashrc to make aliases available immediately
+    source ~/.bashrc
 }
 
 # Verification function
@@ -165,9 +173,9 @@ verify() {
     echo "Verifying Claude Code installation..."
     
     # Check if Claude Code is installed
-    if ! command -v claude-code >/dev/null 2>&1; then
+    if ! command -v claude >/dev/null 2>&1; then
         # Check npm global installation
-        if npm list -g claude-code >/dev/null 2>&1; then
+        if npm list -g @anthropic-ai/claude-code >/dev/null 2>&1; then
             echo "Claude Code is installed via npm but not in PATH"
             echo "You may need to add npm global bin to PATH"
         else
@@ -175,7 +183,7 @@ verify() {
             return 1
         fi
     else
-        local version=$(claude-code --version 2>/dev/null || echo "unknown")
+        local version=$(claude --version 2>/dev/null || echo "unknown")
         echo "Claude Code installed: $version"
     fi
     
@@ -194,13 +202,13 @@ uninstall() {
     echo "Uninstalling Claude Code..."
     
     # Remove npm package
-    if npm list -g claude-code >/dev/null 2>&1; then
-        npm uninstall -g claude-code
+    if npm list -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+        npm uninstall -g @anthropic-ai/claude-code
     fi
     
     # Remove wrapper script
-    if [ -f "$HOME/bin/claude-code" ]; then
-        rm -f "$HOME/bin/claude-code"
+    if [ -f "$HOME/.local/bin/claude" ]; then
+        rm -f "$HOME/.local/bin/claude"
     fi
     
     # Remove configuration
@@ -228,6 +236,10 @@ main() {
             ;;
         install)
             install
+            echo ""
+            echo "✅ Claude Code installed successfully!"
+            echo "You can now use the 'claude' command in your terminal."
+            echo ""
             ;;
         configure)
             configure
