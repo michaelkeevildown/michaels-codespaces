@@ -15,11 +15,11 @@ var (
 // ShowHeader displays the MCS ASCII art header
 func ShowHeader() {
 	header := `
- __  __  ___ _____ 
-|  \/  |/ __/ ____|
-| |\/| | (__\__ \  
-|_|  |_|\___|___/  
-                   
+  __  __  ___ ___ 
+ |  \/  |/ __/ __|
+ | |\/| | (__\__ \
+ |_|  |_|\___|___/
+                  
 Michael's Codespaces`
 
 	fmt.Println(headerStyle.Render(header))

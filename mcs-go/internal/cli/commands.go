@@ -20,6 +20,9 @@ func StartCommand() *cobra.Command {
 		Short: "▶️  Start a codespace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			ctx := context.Background()
 			name := args[0]
 			
@@ -61,6 +64,9 @@ func StopCommand() *cobra.Command {
 		Short: "⏸️  Stop a codespace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			ctx := context.Background()
 			name := args[0]
 			
@@ -91,6 +97,9 @@ func RestartCommand() *cobra.Command {
 		Long:  "Stop and then start a codespace.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			ctx := context.Background()
 			name := args[0]
 			
@@ -147,6 +156,9 @@ func RemoveCommand() *cobra.Command {
 		Short:   "🗑️  Remove a codespace",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			ctx := context.Background()
 			name := args[0]
 			
@@ -204,6 +216,9 @@ func UpdateCommand() *cobra.Command {
 		Short: "🔄 Update MCS to the latest version",
 		Long:  "Update MCS by pulling latest changes from git and rebuilding from source.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			return updateMCS(check)
 		},
 	}

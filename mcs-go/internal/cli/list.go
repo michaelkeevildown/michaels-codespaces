@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/michaelkeevildown/mcs/internal/codespace"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +27,7 @@ func ListCommand() *cobra.Command {
 		Short:   "📋 List all codespaces",
 		Long:    "List all codespaces with their current status.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			ctx := context.Background()
 			
 			// Create manager

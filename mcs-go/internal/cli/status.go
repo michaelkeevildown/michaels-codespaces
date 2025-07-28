@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/docker"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
@@ -48,11 +49,8 @@ func StatusCommand() *cobra.Command {
 func showSystemStatus() error {
 	// Don't clear screen - let user scroll back if needed
 	
-	// Header
-	fmt.Println(strings.Repeat("═", 63))
-	fmt.Println("               Michael's Codespaces Monitor")
-	fmt.Println(strings.Repeat("═", 63))
-	fmt.Println()
+	// Show beautiful header
+	ui.ShowHeader()
 	
 	// System Information
 	fmt.Println(statusHeaderStyle.Render("📊 SYSTEM INFORMATION"))

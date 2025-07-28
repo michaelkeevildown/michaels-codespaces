@@ -30,6 +30,9 @@ This will:
 - Remove PATH entries
 - Keep all codespaces and containers running`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			if !force {
 				fmt.Println("⚠️  This will remove MCS installation files.")
 				fmt.Println("   Your codespaces will be preserved and containers will keep running.")

@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/michaelkeevildown/mcs/internal/docker"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,7 @@ func ExecCommand() *cobra.Command {
 If no command is specified, an interactive shell will be started.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			ctx := context.Background()
 			name := args[0]
 			

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/michaelkeevildown/mcs/internal/backup"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +20,8 @@ func BackupCommand() *cobra.Command {
 		Short: "💾 Manage MCS backups",
 		Long:  `Create, list, restore, and manage backups of your codespaces and MCS installation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
 			return cmd.Help()
 		},
 	}
@@ -55,6 +58,9 @@ func backupCreateCommand() *cobra.Command {
   # Backup MCS installation
   mcs backup create --type install --source ~/.mcs`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			backupManager := backup.NewBackupManager()
 
 			// Determine source path
@@ -131,6 +137,9 @@ func backupListCommand() *cobra.Command {
 		Short:   "List all backups",
 		Long:    `Display all available backups with their metadata.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			backupManager := backup.NewBackupManager()
 
 			backups, err := backupManager.List()
@@ -226,6 +235,9 @@ func backupRestoreCommand() *cobra.Command {
   # Restore to custom location
   mcs backup restore destroy-20250728_123456 --target /tmp/restored`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			backupID := args[0]
 			backupManager := backup.NewBackupManager()
 
@@ -315,6 +327,9 @@ func backupDeleteCommand() *cobra.Command {
 		Long:    `Permanently delete a backup.`,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			backupID := args[0]
 			backupManager := backup.NewBackupManager()
 
@@ -365,6 +380,9 @@ func backupCleanupCommand() *cobra.Command {
   # Preview what would be deleted
   mcs backup cleanup --keep 5 --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			backupManager := backup.NewBackupManager()
 
 			// List current backups

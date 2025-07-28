@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/docker"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +29,7 @@ func DoctorCommand() *cobra.Command {
 		Short:   "🏥 Check system health and requirements",
 		Long:    "Run diagnostic checks to ensure MCS is properly configured and all requirements are met.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			fmt.Println(checkStyle.Render("Michael's Codespaces Doctor"))
 			fmt.Println(strings.Repeat("─", 30))
 			fmt.Println()

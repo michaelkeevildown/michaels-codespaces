@@ -56,11 +56,9 @@ func SetupCommand() *cobra.Command {
 }
 
 func runSetup(bootstrap, skipDeps, skipGitHub, verbose bool) error {
-	// Header
-	if bootstrap {
-		fmt.Println(headerStyle.Render("MCS Setup"))
-		fmt.Println(strings.Repeat("═", 50))
-		fmt.Println()
+	// Show beautiful header
+	if !bootstrap {
+		ui.ShowHeader()
 	}
 
 	// Create necessary directories

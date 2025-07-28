@@ -10,6 +10,7 @@ import (
 
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/docker"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +23,7 @@ func InfoCommand() *cobra.Command {
 		Short:   "ℹ️  Show detailed codespace information",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			ctx := context.Background()
 			name := args[0]
 			

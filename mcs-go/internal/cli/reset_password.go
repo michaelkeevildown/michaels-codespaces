@@ -25,6 +25,7 @@ func ResetPasswordCommand() *cobra.Command {
 		Long:  "Generate a new password for VS Code access to a codespace.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			ctx := context.Background()
 			name := args[0]
 			

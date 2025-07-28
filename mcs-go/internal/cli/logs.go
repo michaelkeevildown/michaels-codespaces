@@ -8,6 +8,7 @@ import (
 	"os/signal"
 
 	"github.com/michaelkeevildown/mcs/internal/docker"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +23,7 @@ func LogsCommand() *cobra.Command {
 		Long:  "Display logs from a codespace container.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			ctx := context.Background()
 			name := args[0]
 			

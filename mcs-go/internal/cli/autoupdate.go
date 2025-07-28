@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/config"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +32,7 @@ Subcommands:
   off      - Disable automatic update checking  
   interval - Set update check interval in seconds`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			// Default to status if no subcommand
 			if len(args) == 0 {
 				return showAutoUpdateStatus()

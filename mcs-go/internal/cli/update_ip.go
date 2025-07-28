@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/config"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -36,6 +37,9 @@ Available modes:
   
 You can also use flags for direct configuration.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
 			// Handle flags first
 			if showFlag, _ := cmd.Flags().GetBool("show"); showFlag {
 				return showCurrentConfig()

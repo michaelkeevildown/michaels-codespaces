@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/codespace"
+	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +25,7 @@ func RecoverCommand() *cobra.Command {
 		Long:  "Quickly recover and display the credentials for a codespace.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ui.ShowHeader()
 			ctx := context.Background()
 			name := args[0]
 			

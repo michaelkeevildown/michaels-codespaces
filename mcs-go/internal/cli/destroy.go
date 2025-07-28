@@ -116,12 +116,8 @@ Use 'mcs cleanup' for a soft removal that preserves codespaces.`,
 func performDestroy(keepDocker, skipBackup bool) error {
 	progress := ui.NewProgress()
 	
-	// Header
-	fmt.Println()
-	fmt.Println(strings.Repeat("═", 50))
-	fmt.Println(headerStyle.Render("MCS Destruction Process"))
-	fmt.Println(strings.Repeat("═", 50))
-	fmt.Println()
+	// Show beautiful header
+	ui.ShowHeader()
 	
 	progress.Start("Beginning destruction sequence")
 
