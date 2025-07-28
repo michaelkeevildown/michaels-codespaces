@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/components"
@@ -161,25 +162,63 @@ func showSuccess(cs *codespace.Codespace) {
 	fmt.Println("✨ Codespace created successfully!")
 	fmt.Println()
 	
-	// Create the perfect box format
-	boxTop := "╭─────────────────────────────────────────────╮"
-	boxMid := "│                                             │"
-	boxBot := "╰─────────────────────────────────────────────╯"
+	// Calculate the maximum width needed
+	lines := []struct {
+		icon  string
+		label string
+		value string
+	}{
+		{"📍", "Name", cs.Name},
+		{"🔗", "VS Code", cs.VSCodeURL},
+		{"🔑", "Password", cs.Password},
+		{"📂", "Path", cs.Path},
+	}
 	
-	// Format content with proper spacing
-	nameLine := fmt.Sprintf("│  📍 Name: %-33s │", cs.Name)
-	vscLine := fmt.Sprintf("│  🔗 VS Code: %-30s │", cs.VSCodeURL)
-	pwdLine := fmt.Sprintf("│  🔑 Password: %-29s │", cs.Password)
-	pathLine := fmt.Sprintf("│  📂 Path: %-33s │", cs.Path)
+	// Find the longest line
+	maxWidth := 0
+	for _, line := range lines {
+		// Calculate: "│  icon label: value  │"
+		lineWidth := 2 + len(line.icon) + 1 + len(line.label) + 2 + len(line.value) + 2 + 1
+		if lineWidth > maxWidth {
+			maxWidth = lineWidth
+		}
+	}
+	
+	// Ensure minimum width
+	if maxWidth < 50 {
+		maxWidth = 50
+	}
+	
+	// Create box elements
+	boxLine := make([]byte, maxWidth)
+	for i := range boxLine {
+		boxLine[i] = '─'
+	}
+	boxTop := "╭" + string(boxLine[1:maxWidth-1]) + "╮"
+	boxBot := "╰" + string(boxLine[1:maxWidth-1]) + "╯"
+	
+	// Helper function to pad line to box width
+	padLine := func(content string) string {
+		padding := maxWidth - len(content) - 2
+		if padding < 0 {
+			padding = 0
+		}
+		return "│ " + content + strings.Repeat(" ", padding) + " │"
+	}
 	
 	// Print the box
 	fmt.Println(boxTop)
-	fmt.Println(boxMid)
-	fmt.Println(nameLine)
-	fmt.Println(vscLine)
-	fmt.Println(pwdLine)
-	fmt.Println(pathLine)
-	fmt.Println(boxMid)
+	fmt.Println(padLine(""))
+	
+	// Print each line
+	for _, line := range lines {
+		if line.value != "" { // Only show lines with values
+			content := fmt.Sprintf("%s %s: %s", line.icon, line.label, line.value)
+			fmt.Println(padLine(content))
+		}
+	}
+	
+	fmt.Println(padLine(""))
 	fmt.Println(boxBot)
 	fmt.Println()
 	
