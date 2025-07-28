@@ -7,10 +7,13 @@ LABEL description="MCS Node.js development environment"
 # Switch to root for Node.js installation
 USER root
 
-# Install Node.js and npm
+# Install Node.js and npm with build tools for native modules
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y \
+    nodejs \
+    build-essential \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install global npm packages that are commonly used
 RUN npm install -g \

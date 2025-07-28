@@ -33,9 +33,9 @@ install() {
     mkdir -p "$NPM_PREFIX"
     npm config set prefix "$NPM_PREFIX"
     
-    # Install Claude Flow locally
+    # Install Claude Flow globally
     echo "Installing Claude Flow via npm..."
-    npm install claude-flow@alpha
+    npm install -g claude-flow@alpha
     
     # Create symlink in local bin
     mkdir -p "$HOME/.local/bin"
