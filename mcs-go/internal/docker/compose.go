@@ -69,18 +69,7 @@ const dockerComposeTemplate = `services:
       {{- end }}
     working_dir: /home/coder/{{ .CodespaceName }}
     entrypoint: ["/bin/sh"]
-    command: ["-c", "
-        {{- if .Components }}
-        # Install components
-        if [ -f /docker-entrypoint-initdb.d/init.sh ]; then
-          echo 'Installing components...' &&
-          chmod +x /docker-entrypoint-initdb.d/init.sh &&
-          /docker-entrypoint-initdb.d/init.sh
-        fi &&
-        {{- end }}
-        # Start code-server
-        code-server --bind-addr 0.0.0.0:8080 --auth password
-      "]
+    command: ["-c", "{{- if .Components }}if [ -f /docker-entrypoint-initdb.d/init.sh ]; then echo 'Installing components...' && chmod +x /docker-entrypoint-initdb.d/init.sh && /docker-entrypoint-initdb.d/init.sh; fi && {{- end }}code-server --bind-addr 0.0.0.0:8080 --auth password"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
