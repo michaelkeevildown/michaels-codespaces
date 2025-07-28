@@ -54,7 +54,7 @@ RUN apt-get update && apt-get install -y \
 USER coder
 
 # Set up environments
-RUN mkdir -p ~/go/{bin,src,pkg} && \
+RUN mkdir -p ~/go/bin ~/go/src ~/go/pkg && \
     npm config set prefix "$HOME/.npm-global" && \
     mkdir -p ~/.local/bin ~/.local/share ~/.npm-global/bin && \
     echo 'alias python=python3' >> ~/.bashrc && \

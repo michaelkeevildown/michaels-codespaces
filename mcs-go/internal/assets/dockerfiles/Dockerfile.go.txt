@@ -29,7 +29,7 @@ RUN go install golang.org/x/tools/gopls@latest && \
 USER coder
 
 # Set up Go workspace
-RUN mkdir -p ~/go/{bin,src,pkg}
+RUN mkdir -p ~/go/bin ~/go/src ~/go/pkg
 
 # Verify installation
 RUN go version

@@ -39,7 +39,7 @@ RUN npm install -g \
 USER coder
 
 # Set up workspaces
-RUN mkdir -p ~/go/{bin,src,pkg} && \
+RUN mkdir -p ~/go/bin ~/go/src ~/go/pkg && \
     npm config set prefix "$HOME/.npm-global" && \
     mkdir -p ~/.local/bin ~/.local/share ~/.npm-global/bin
 
