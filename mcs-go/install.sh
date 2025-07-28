@@ -72,6 +72,7 @@ detect_platform() {
 # Check for required tools
 check_requirements() {
     local missing=()
+    local docker_missing=false
     
     # Check for Go (optional - for building from source)
     if ! command -v go >/dev/null 2>&1; then
@@ -81,21 +82,26 @@ check_requirements() {
         GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
     fi
     
-    # Check for Docker (required)
+    # Check for Docker (will be installed by MCS setup if missing)
     if ! command -v docker >/dev/null 2>&1; then
-        missing+=("docker")
+        docker_missing=true
+        warning "Docker not found - MCS setup will install it for you"
     fi
     
-    # Check for Git (required)
+    # Check for Git (required for cloning)
     if ! command -v git >/dev/null 2>&1; then
         missing+=("git")
     fi
     
+    # Only fail if we're missing Git (which we need to clone the repo)
     if [ ${#missing[@]} -gt 0 ]; then
         error "Missing required tools: ${missing[*]}"
         error "Please install them before running this installer"
         exit 1
     fi
+    
+    # Set a flag for Docker installation
+    DOCKER_MISSING=$docker_missing
 }
 
 # Clone or update repository
@@ -289,6 +295,8 @@ main() {
     if [ -n "${GITHUB_TOKEN:-}" ]; then
         echo "Authentication: Using provided GitHub token"
     fi
+    echo ""
+    echo "Note: MCS will install and configure Docker if not present"
     echo ""
     
     # Detect platform
@@ -486,6 +494,10 @@ EOF
     
     # Run setup to configure network and other settings
     info "Running initial setup..."
+    if [ "$DOCKER_MISSING" = true ]; then
+        echo ""
+        info "Setup will install Docker and configure your environment"
+    fi
     echo ""
     if "$BIN_DIR/mcs" setup --bootstrap; then
         echo ""
