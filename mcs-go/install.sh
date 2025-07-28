@@ -422,8 +422,8 @@ EOF
         exit 1
     fi
     
-    # Test running the binary
-    if ! "$BIN_DIR/mcs" version >/dev/null 2>&1; then
+    # Test running the binary (using --version flag for Cobra)
+    if ! "$BIN_DIR/mcs" --version >/dev/null 2>&1; then
         error "MCS binary exists but failed to run"
         error "Trying to diagnose the issue..."
         
@@ -433,18 +433,18 @@ EOF
         echo "Permissions: $(ls -la "$BIN_DIR/mcs")"
         echo ""
         echo "Attempting to run with error output:"
-        "$BIN_DIR/mcs" version 2>&1 || true
+        "$BIN_DIR/mcs" --version 2>&1 || true
         echo ""
         
         error "Installation completed but MCS test failed"
         echo ""
         error "TROUBLESHOOTING STEPS:"
         echo "1. Check if the binary works directly:"
-        echo "   $BIN_DIR/mcs version"
+        echo "   $BIN_DIR/mcs --version"
         echo ""
         echo "2. If that works, the issue is PATH related. Run:"
         echo "   export PATH=\"$BIN_DIR:\$PATH\""
-        echo "   mcs version"
+        echo "   mcs --version"
         echo ""
         echo "3. If the binary doesn't work directly, possible causes:"
         echo "   - Architecture mismatch (built for wrong platform)"
@@ -459,7 +459,7 @@ EOF
     
     success "MCS installed successfully!"
     echo ""
-    info "Version: $("$BIN_DIR/mcs" version 2>/dev/null || echo "unknown")"
+    info "Version: $("$BIN_DIR/mcs" --version 2>/dev/null || echo "unknown")"
     echo ""
     info "Installation details:"
     echo "  Location: $MCS_HOME"
