@@ -12,6 +12,7 @@ import (
 
 	"github.com/michaelkeevildown/mcs/internal/assets"
 	"github.com/michaelkeevildown/mcs/internal/components"
+	"github.com/michaelkeevildown/mcs/internal/config"
 	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/michaelkeevildown/mcs/internal/git"
 	"github.com/michaelkeevildown/mcs/internal/ports"
@@ -130,6 +131,18 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 		return nil, fmt.Errorf("failed to create Docker network: %w", err)
 	}
 
+	// Get configured host IP
+	cfg, err := config.NewManager()
+	if err != nil {
+		portRegistry.ReleaseCodespacePorts(opts.Name)
+		os.RemoveAll(codespaceDir)
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+	hostIP := cfg.GetHostIP()
+	if hostIP == "" {
+		hostIP = "localhost"
+	}
+
 	// Create codespace object
 	cs := &Codespace{
 		Name:       opts.Name,
@@ -137,8 +150,8 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 		Path:       codespaceDir,
 		Status:     "created",
 		CreatedAt:  time.Now(),
-		VSCodeURL:  fmt.Sprintf("http://localhost:%d", allocatedPorts["vscode"]),
-		AppURL:     fmt.Sprintf("http://localhost:%d", allocatedPorts["app"]),
+		VSCodeURL:  fmt.Sprintf("http://%s:%d", hostIP, allocatedPorts["vscode"]),
+		AppURL:     fmt.Sprintf("http://%s:%d", hostIP, allocatedPorts["app"]),
 		Components: components.GetSelectedIDs(),
 		Language:   language,
 		Password:   password,

@@ -13,7 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/michaelkeevildown/mcs/internal/config"
 	"github.com/michaelkeevildown/mcs/internal/ui"
+	"github.com/michaelkeevildown/mcs/pkg/utils"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -83,6 +85,13 @@ func runSetup(bootstrap, skipDeps, skipGitHub bool) error {
 			fmt.Println(warningStyle.Render("⚠️  GitHub configuration skipped"))
 			fmt.Println("You can configure it later with: mcs setup --skip-deps")
 		}
+	}
+
+	// Configure network access
+	if err := configureNetworkAccess(); err != nil {
+		// Non-fatal
+		fmt.Println(warningStyle.Render("⚠️  Network configuration failed"))
+		fmt.Println("You can configure it later with: mcs update-ip")
 	}
 
 	// Success message
@@ -734,6 +743,123 @@ func installDockerLinux() error {
 	}
 
 	progress.Success("Docker installed successfully")
+	return nil
+}
+
+func configureNetworkAccess() error {
+	fmt.Println()
+	fmt.Println(infoStyle.Render("🌐 Configuring network access..."))
+	
+	// Load config manager
+	cfg, err := config.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	
+	// Check if already configured
+	currentConfig := cfg.Get()
+	if currentConfig.IPMode != "localhost" || currentConfig.HostIP != "localhost" {
+		fmt.Println(successStyle.Render("✓ Network access already configured"))
+		fmt.Printf("%s  Mode: %s, IP: %s\n", infoStyle.Render("ℹ"), currentConfig.IPMode, currentConfig.HostIP)
+		return nil
+	}
+	
+	// Get available network addresses
+	addresses, err := utils.GetAvailableNetworkAddresses()
+	if err != nil {
+		fmt.Println(warningStyle.Render("⚠️  Could not detect network addresses"))
+		return err
+	}
+	
+	// Show network configuration options
+	fmt.Println()
+	fmt.Println(strings.Repeat("═", 50))
+	fmt.Println(headerStyle.Render("Network Access Configuration"))
+	fmt.Println(strings.Repeat("═", 50))
+	fmt.Println()
+	fmt.Println("How would you like to access your codespaces?")
+	fmt.Println()
+	
+	// Display available options
+	validOptions := make(map[string]utils.NetworkInterface)
+	optionNum := 1
+	
+	for _, addr := range addresses {
+		if addr.Type == "localhost" || addr.Type == "local" {
+			fmt.Printf("%d. %s\n", optionNum, addr.Name)
+			validOptions[fmt.Sprintf("%d", optionNum)] = addr
+			optionNum++
+		}
+	}
+	
+	// Show future options as disabled
+	for _, addr := range addresses {
+		if addr.Type == "external" || addr.Type == "domain" {
+			fmt.Printf("%s. %s\n", dimStyle.Render(fmt.Sprintf("%d", optionNum)), dimStyle.Render(addr.Name))
+			optionNum++
+		}
+	}
+	
+	fmt.Println()
+	fmt.Println(infoStyle.Render("ℹ️  Choose how codespaces will be accessible:"))
+	fmt.Println("   • Localhost = Only from this machine")
+	fmt.Println("   • Local Network = From any device on your network")
+	fmt.Println()
+	fmt.Print("Select option (default: 1): ")
+	os.Stdout.Sync()
+	
+	// Read user choice
+	reader := bufio.NewReader(os.Stdin)
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(choice)
+	
+	// Default to localhost if no choice
+	if choice == "" {
+		choice = "1"
+	}
+	
+	// Get selected option
+	selected, ok := validOptions[choice]
+	if !ok {
+		fmt.Println(warningStyle.Render("Invalid option, defaulting to localhost"))
+		selected = validOptions["1"]
+	}
+	
+	// Configure based on selection
+	var ipMode string
+	var hostIP string
+	
+	if selected.Type == "localhost" {
+		ipMode = "localhost"
+		hostIP = "127.0.0.1"
+	} else if selected.Type == "local" {
+		ipMode = "specific"
+		hostIP = selected.IP
+	}
+	
+	// Save configuration
+	if err := cfg.SetIPMode(ipMode); err != nil {
+		return err
+	}
+	if err := cfg.SetHostIP(hostIP); err != nil {
+		return err
+	}
+	
+	fmt.Println()
+	fmt.Println(successStyle.Render("✓ Network access configured"))
+	fmt.Printf("%s  Codespaces will be accessible at: %s%s%s\n", 
+		infoStyle.Render("ℹ"), 
+		boldStyle.Render("http://"), 
+		boldStyle.Render(hostIP), 
+		boldStyle.Render(":PORT"))
+	
+	if selected.Type == "local" {
+		fmt.Println()
+		fmt.Println(warningStyle.Render("⚠️  Security Note:"))
+		fmt.Println("   Codespaces will be accessible from other devices on your network.")
+		fmt.Println("   Make sure you trust all devices on your network.")
+	}
+	
 	return nil
 }
 

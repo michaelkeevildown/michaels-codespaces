@@ -328,6 +328,18 @@ EOF
             echo "  Built from: pre-built binary"
         fi
         echo ""
+        
+        # Run setup to configure network and other settings
+        info "Running initial setup..."
+        echo ""
+        if "$BIN_DIR/mcs" setup --bootstrap; then
+            echo ""
+            success "Setup completed!"
+        else
+            warning "Setup encountered issues. You can run 'mcs setup' later to reconfigure."
+        fi
+        
+        echo ""
         info "Get started with:"
         echo "  mcs create github.com/user/repo"
         echo "  mcs list"

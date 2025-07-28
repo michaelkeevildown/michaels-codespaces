@@ -9,6 +9,7 @@ import (
 
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/components"
+	"github.com/michaelkeevildown/mcs/internal/config"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/michaelkeevildown/mcs/pkg/utils"
 	"github.com/spf13/cobra"
@@ -186,6 +187,16 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 	// Generate secure password
 	password := utils.GenerateSecurePassword()
 	
+	// Get configured host IP
+	cfg, err := config.NewManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+	hostIP := cfg.GetHostIP()
+	if hostIP == "" {
+		hostIP = "localhost"
+	}
+	
 	// Create codespace object
 	cs := &codespace.Codespace{
 		Name:       opts.Name,
@@ -193,8 +204,8 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 		Path:       opts.GetPath(),
 		Status:     "running",
 		CreatedAt:  time.Now(),
-		VSCodeURL:  fmt.Sprintf("http://localhost:8080"),
-		AppURL:     fmt.Sprintf("http://localhost:3000"),
+		VSCodeURL:  fmt.Sprintf("http://%s:8080", hostIP),
+		AppURL:     fmt.Sprintf("http://%s:3000", hostIP),
 		Password:   password,
 		VSCodePort: 8080,
 	}
