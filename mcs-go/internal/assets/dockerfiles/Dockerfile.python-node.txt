@@ -1,0 +1,49 @@
+# Python + Node.js development environment
+FROM mcs/code-server-base:latest
+
+# Metadata
+LABEL description="MCS Python + Node.js development environment"
+
+# Switch to root for installations
+USER root
+
+# Install Python and development tools
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-venv \
+    python3-setuptools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install common Python packages
+RUN pip3 install --upgrade pip && \
+    pip3 install \
+    virtualenv \
+    pipenv \
+    poetry \
+    black \
+    pytest \
+    jupyter
+
+# Install common npm packages
+RUN npm install -g \
+    yarn \
+    typescript \
+    nodemon
+
+# Switch back to coder user
+USER coder
+
+# Set up environments
+RUN echo 'alias python=python3' >> ~/.bashrc && \
+    echo 'alias pip=pip3' >> ~/.bashrc && \
+    npm config set prefix "$HOME/.npm-global"
+
+# Verify installations
+RUN python3 --version && node --version && npm --version

@@ -1,0 +1,31 @@
+# Node.js development environment
+FROM mcs/code-server-base:latest
+
+# Metadata
+LABEL description="MCS Node.js development environment"
+
+# Switch to root for Node.js installation
+USER root
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install global npm packages that are commonly used
+RUN npm install -g \
+    yarn \
+    pnpm \
+    typescript \
+    @types/node \
+    nodemon \
+    pm2
+
+# Switch back to coder user
+USER coder
+
+# Configure npm for user-level global installs
+RUN npm config set prefix "$HOME/.npm-global"
+
+# Verify installation
+RUN node --version && npm --version

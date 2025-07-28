@@ -180,8 +180,9 @@ func GenerateInitScript(comps []components.Component) ([]byte, error) {
 
 // ImageInfo contains both the image name and dockerfile info
 type ImageInfo struct {
-	Image      string
-	Dockerfile string
+	Image         string
+	Dockerfile    string
+	FallbackImage string
 }
 
 // GetImageInfo returns the appropriate Docker image and dockerfile for a language
@@ -224,9 +225,12 @@ func GetImageInfo(language string, components []components.Component) ImageInfo 
 		}
 	}
 	
-	// Get image name
+	// Get image name - fallback to base code-server if custom images don't exist
 	var image string
 	if needsNode {
+		// For components that need Node.js, we must use a node-enabled image
+		// If our custom images aren't available, fall back to base code-server
+		// (user will need to install Node.js manually)
 		if img, ok := languageImagesWithNode[lang]; ok {
 			image = img
 		} else {
@@ -240,9 +244,14 @@ func GetImageInfo(language string, components []components.Component) ImageInfo 
 		}
 	}
 	
+	// Check if we should fallback to the original code-server image
+	// This happens when dockerfiles aren't available
+	fallbackImage := "codercom/code-server:latest"
+	
 	return ImageInfo{
 		Image:      image,
 		Dockerfile: dockerfile,
+		FallbackImage: fallbackImage,
 	}
 }
 

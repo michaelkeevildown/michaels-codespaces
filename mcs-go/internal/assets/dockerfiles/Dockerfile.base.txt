@@ -1,0 +1,38 @@
+# Base image with just code-server
+FROM codercom/code-server:latest
+
+# Metadata
+LABEL maintainer="MCS"
+LABEL description="Base MCS development environment with VS Code in browser"
+
+# Switch to root for system setup
+USER root
+
+# Install basic tools that all environments need
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    wget \
+    vim \
+    htop \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories for MCS
+RUN mkdir -p /opt/mcs/bin /opt/mcs/installers
+
+# Switch back to coder user
+USER coder
+
+# Set up user environment
+RUN mkdir -p ~/.local/bin ~/.npm-global && \
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
+    echo 'export NPM_PREFIX="$HOME/.npm-global"' >> ~/.bashrc && \
+    echo 'export PATH="$NPM_PREFIX/bin:$PATH"' >> ~/.bashrc
+
+# Working directory
+WORKDIR /home/coder
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:8080/healthz || exit 1

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/michaelkeevildown/mcs/internal/assets"
+	"github.com/michaelkeevildown/mcs/internal/assets/dockerfiles"
 	"github.com/michaelkeevildown/mcs/internal/components"
 	"github.com/michaelkeevildown/mcs/internal/config"
 	"github.com/michaelkeevildown/mcs/internal/docker"
@@ -79,12 +80,37 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 	// Get image info based on language and components
 	imageInfo := docker.GetImageInfo(language, opts.Components)
 	
+	// Check if dockerfiles are available
+	dockerfilesPath := config.GetDockerfilesPath()
+	var buildContext string
+	var dockerfile string
+	var finalImage string
+	
+	// Try to extract dockerfiles if not present
+	if _, err := os.Stat(dockerfilesPath); os.IsNotExist(err) {
+		// Try to extract embedded dockerfiles
+		if err := extractEmbeddedDockerfiles(dockerfilesPath); err == nil {
+			buildContext = dockerfilesPath
+			dockerfile = imageInfo.Dockerfile
+			finalImage = imageInfo.Image
+		} else {
+			// Extraction failed, use fallback image without build context
+			finalImage = imageInfo.FallbackImage
+			reportProgress("Using fallback image (dockerfiles not available)")
+		}
+	} else {
+		// Dockerfiles directory exists
+		buildContext = dockerfilesPath
+		dockerfile = imageInfo.Dockerfile
+		finalImage = imageInfo.Image
+	}
+	
 	dockerConfig := docker.ComposeConfig{
 		ContainerName: fmt.Sprintf("%s-dev", opts.Name),
 		CodespaceName: opts.Name,
-		Image:         imageInfo.Image,
-		BuildContext:  config.GetDockerfilesPath(),
-		Dockerfile:    imageInfo.Dockerfile,
+		Image:         finalImage,
+		BuildContext:  buildContext,
+		Dockerfile:    dockerfile,
 		Password:      password,
 		Ports: map[string]string{
 			fmt.Sprintf("%d", allocatedPorts["vscode"]): "8080",
@@ -332,4 +358,9 @@ func (o CreateOptions) Validate() error {
 		return fmt.Errorf("repository is required")
 	}
 	return nil
+}
+
+// extractEmbeddedDockerfiles extracts embedded dockerfiles to the target directory
+func extractEmbeddedDockerfiles(targetDir string) error {
+	return dockerfiles.ExtractDockerfiles(targetDir)
 }
