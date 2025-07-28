@@ -58,9 +58,21 @@ func Clone(ctx context.Context, opts CloneOptions) error {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
+	// Determine the URL to use for cloning
+	cloneURL := opts.URL
+	
+	// If we have a GitHub token and this is a GitHub SSH URL, convert to HTTPS
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		if strings.HasPrefix(opts.URL, "git@github.com:") {
+			// Convert git@github.com:user/repo.git to https://github.com/user/repo.git
+			cloneURL = strings.Replace(opts.URL, "git@github.com:", "https://github.com/", 1)
+			fmt.Printf("Using GitHub token authentication (converted SSH to HTTPS)\n")
+		}
+	}
+
 	// Setup clone options
 	cloneOpts := &git.CloneOptions{
-		URL:      opts.URL,
+		URL:      cloneURL,
 		Progress: &ProgressWriter{callback: opts.Progress},
 	}
 
@@ -79,7 +91,7 @@ func Clone(ctx context.Context, opts CloneOptions) error {
 		cloneOpts.Auth = opts.Auth
 	} else {
 		// Try to auto-detect auth method
-		cloneOpts.Auth = detectAuthMethod(opts.URL)
+		cloneOpts.Auth = detectAuthMethod(cloneURL)
 	}
 
 	// Clone the repository
@@ -95,7 +107,28 @@ func Clone(ctx context.Context, opts CloneOptions) error {
 
 // detectAuthMethod attempts to detect the appropriate auth method
 func detectAuthMethod(url string) transport.AuthMethod {
-	// SSH URLs
+	// First, check if we have a GitHub token - this is preferred over SSH
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		// Check if this is a GitHub URL (SSH or HTTPS)
+		if strings.Contains(url, "github.com") {
+			return &http.BasicAuth{
+				Username: "token",
+				Password: token,
+			}
+		}
+	}
+
+	// GitLab token
+	if token := os.Getenv("GITLAB_TOKEN"); token != "" {
+		if strings.Contains(url, "gitlab") {
+			return &http.BasicAuth{
+				Username: "oauth2",
+				Password: token,
+			}
+		}
+	}
+
+	// Fall back to SSH for git@ URLs if no token is available
 	if strings.HasPrefix(url, "git@") || strings.Contains(url, "ssh://") {
 		// Try to use SSH key from default location
 		homeDir, _ := os.UserHomeDir()
@@ -111,25 +144,8 @@ func detectAuthMethod(url string) transport.AuthMethod {
 			if err == nil {
 				return auth
 			}
-		}
-	}
-
-	// HTTPS URLs - try token from environment
-	if strings.HasPrefix(url, "https://") {
-		// GitHub token
-		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-			return &http.BasicAuth{
-				Username: "token",
-				Password: token,
-			}
-		}
-
-		// GitLab token
-		if token := os.Getenv("GITLAB_TOKEN"); token != "" {
-			return &http.BasicAuth{
-				Username: "oauth2",
-				Password: token,
-			}
+			// Log the error for debugging
+			fmt.Printf("Warning: Failed to load SSH key from %s: %v\n", sshKeyPath, err)
 		}
 	}
 
@@ -145,13 +161,21 @@ func ValidateRepository(ctx context.Context, url string) error {
 	}
 	defer os.RemoveAll(tempDir)
 
+	// Convert SSH URL to HTTPS if we have a GitHub token
+	validateURL := url
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		if strings.HasPrefix(url, "git@github.com:") {
+			validateURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+		}
+	}
+
 	// Try to list references without cloning
 	remote := git.NewRemote(nil, &config.RemoteConfig{
 		Name: "origin",
-		URLs: []string{url},
+		URLs: []string{validateURL},
 	})
 
-	auth := detectAuthMethod(url)
+	auth := detectAuthMethod(validateURL)
 	_, err = remote.ListContext(ctx, &git.ListOptions{
 		Auth: auth,
 	})
@@ -165,12 +189,20 @@ func ValidateRepository(ctx context.Context, url string) error {
 
 // GetDefaultBranch determines the default branch of a repository
 func GetDefaultBranch(ctx context.Context, url string) (string, error) {
+	// Convert SSH URL to HTTPS if we have a GitHub token
+	checkURL := url
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		if strings.HasPrefix(url, "git@github.com:") {
+			checkURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+		}
+	}
+
 	remote := git.NewRemote(nil, &config.RemoteConfig{
 		Name: "origin",
-		URLs: []string{url},
+		URLs: []string{checkURL},
 	})
 
-	auth := detectAuthMethod(url)
+	auth := detectAuthMethod(checkURL)
 	refs, err := remote.ListContext(ctx, &git.ListOptions{
 		Auth: auth,
 	})
