@@ -38,13 +38,13 @@ install() {
     npm install claude-code@latest
     
     # Create symlink in local bin
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$NPM_PREFIX/bin/claude-code" "$HOME/.local/bin/claude-code"
+    mkdir -p "$HOME/bin"
+    ln -sf "$NPM_PREFIX/bin/claude-code" "$HOME/bin/claude-code"
     
     # Update PATH if needed
-    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-        export PATH="$HOME/.local/bin:$PATH"
+    if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+        echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+        export PATH="$HOME/bin:$PATH"
     fi
 }
 
@@ -81,8 +81,8 @@ install_nodejs() {
         mkdir -p "$HOME/.local"
         cp -r /tmp/node-${node_version}-linux-${arch}/* "$HOME/.local/"
         rm -rf /tmp/node-${node_version}-linux-${arch}
-        export PATH="$HOME/.local/bin:$PATH"
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        export PATH="$HOME/bin:$PATH"
+        echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
     fi
 }
 
@@ -91,17 +91,17 @@ create_npx_wrapper() {
     echo "Creating claude-code wrapper..."
     
     # Create wrapper script
-    mkdir -p "$HOME/.local/bin"
-    cat > "$HOME/.local/bin/claude-code" << 'EOF'
+    mkdir -p "$HOME/bin"
+    cat > "$HOME/bin/claude-code" << 'EOF'
 #!/bin/bash
 # Claude Code wrapper script
 exec npx claude-code@latest "$@"
 EOF
     
     # Make executable
-    chmod +x "$HOME/.local/bin/claude-code"
+    chmod +x "$HOME/bin/claude-code"
     
-    echo "Created claude-code wrapper at $HOME/.local/bin/claude-code"
+    echo "Created claude-code wrapper at $HOME/bin/claude-code"
 }
 
 # Configuration function
@@ -199,8 +199,8 @@ uninstall() {
     fi
     
     # Remove wrapper script
-    if [ -f "$HOME/.local/bin/claude-code" ]; then
-        rm -f "$HOME/.local/bin/claude-code"
+    if [ -f "$HOME/bin/claude-code" ]; then
+        rm -f "$HOME/bin/claude-code"
     fi
     
     # Remove configuration
