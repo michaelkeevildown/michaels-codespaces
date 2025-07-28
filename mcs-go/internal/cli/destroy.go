@@ -20,6 +20,7 @@ import (
 )
 
 var (
+	// Destroy-specific styles
 	destroyWarningStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 	destroyInfoStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
@@ -114,69 +115,148 @@ Use 'mcs cleanup' for a soft removal that preserves codespaces.`,
 
 func performDestroy(keepDocker, skipBackup bool) error {
 	progress := ui.NewProgress()
+	
+	// Header
+	fmt.Println()
+	fmt.Println(strings.Repeat("═", 50))
+	fmt.Println(headerStyle.Render("MCS Destruction Process"))
+	fmt.Println(strings.Repeat("═", 50))
+	fmt.Println()
+	
 	progress.Start("Beginning destruction sequence")
 
 	// 1. Create backup if requested
 	if !skipBackup {
+		fmt.Println()
+		fmt.Println(infoStyle.Render("📦 Creating Backup"))
+		fmt.Println(strings.Repeat("─", 50))
+		fmt.Println(dimStyle.Render("Backing up your codespace data..."))
+		fmt.Println()
+		
 		if err := createBackup(); err != nil {
 			// Don't fail, just warn
-			fmt.Printf("Warning: Failed to create backup: %v\n", err)
+			fmt.Println(warningStyle.Render("⚠️  Failed to create backup: " + err.Error()))
+			fmt.Println(dimStyle.Render("   Continuing without backup..."))
 		} else {
-			progress.Update("Created backup in ~/mcs-backup")
+			progress.Update("Created backup")
+			fmt.Println(successStyle.Render("✓ Backup created in ~/mcs-backup"))
+			fmt.Println(dimStyle.Render("  Your data is safe and can be restored later"))
 		}
 	}
 
 	// 2. Stop all running containers
 	dockerClient, err := docker.NewClient()
 	if err == nil {
-		progress.Update("Stopping all codespace containers")
+		fmt.Println()
+		fmt.Println(infoStyle.Render("🐳 Container Cleanup"))
+		fmt.Println(strings.Repeat("─", 50))
+		
+		progress.Update("Checking for running containers")
 
 		containers, err := dockerClient.ListContainers(context.Background(), "")
 		if err == nil {
+			mcsContainerCount := 0
 			for _, container := range containers {
-				// Only stop MCS containers
 				if strings.Contains(container.Name, "mcs-") ||
 					strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
-					if err := dockerClient.StopContainer(context.Background(), container.ID); err != nil {
-						fmt.Printf("Warning: Failed to stop container %s: %v\n", container.Name, err)
-					}
+					mcsContainerCount++
 				}
 			}
+			
+			if mcsContainerCount > 0 {
+				fmt.Printf(dimStyle.Render("Found %d MCS container(s) to remove\n"), mcsContainerCount)
+				fmt.Println()
+				
+				progress.Update("Stopping containers")
+				for _, container := range containers {
+					// Only stop MCS containers
+					if strings.Contains(container.Name, "mcs-") ||
+						strings.Contains(container.Name, "michaelkeevildown/claude-coder") {
+						shortID := container.ID[:12]
+						fmt.Printf(dimStyle.Render("  → Stopping %s (%s)..."), container.Name, shortID)
+						if err := dockerClient.StopContainer(context.Background(), container.ID); err != nil {
+							fmt.Printf(" %s\n", errorStyle.Render("failed"))
+							fmt.Printf(dimStyle.Render("    Error: %v\n"), err)
+						} else {
+							fmt.Printf(" %s\n", successStyle.Render("✓"))
+						}
+					}
+				}
+			} else {
+				fmt.Println(dimStyle.Render("No active containers found"))
+			}
 		}
-		progress.Update("Stopped all containers")
+		progress.Update("All containers stopped")
 
 		// 3. Remove all containers
-		progress.Update("Removing all codespace containers")
+		fmt.Println()
+		progress.Update("Removing containers")
 		if err := removeAllContainers(dockerClient); err != nil {
-			fmt.Printf("Warning: Failed to remove some containers: %v\n", err)
+			fmt.Println(warningStyle.Render("⚠️  Some containers could not be removed"))
+			fmt.Println(dimStyle.Render("   You may need to remove them manually"))
+		} else {
+			fmt.Println(successStyle.Render("✓ All containers removed"))
 		}
-		progress.Update("Removed all containers")
 	}
 
 	// 4. Remove codespaces directory
 	homeDir := os.Getenv("HOME")
 	codespacesDir := filepath.Join(homeDir, "codespaces")
+	
+	fmt.Println()
+	fmt.Println(infoStyle.Render("📁 Removing Data"))
+	fmt.Println(strings.Repeat("─", 50))
+	
 	if _, err := os.Stat(codespacesDir); err == nil {
+		// Try to get directory size
+		var dirSize int64
+		filepath.Walk(codespacesDir, func(_ string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() {
+				dirSize += info.Size()
+			}
+			return nil
+		})
+		
+		sizeStr := formatBytes(uint64(dirSize))
+		fmt.Printf(dimStyle.Render("Removing codespace data (%s)...\n"), sizeStr)
+		
 		progress.Update("Removing codespaces directory")
 		if err := os.RemoveAll(codespacesDir); err != nil {
 			progress.Fail("Failed to remove codespaces directory")
 			return fmt.Errorf("failed to remove %s: %w", codespacesDir, err)
 		}
-		progress.Update("Removed all codespace data")
+		fmt.Println(successStyle.Render("✓ Removed ~/codespaces"))
+	} else {
+		fmt.Println(dimStyle.Render("No codespaces directory found"))
 	}
 
 	// 5. Remove MCS installation
-	progress.Update("Removing MCS installation")
+	fmt.Println()
+	fmt.Println(dimStyle.Render("Removing MCS installation files..."))
+	
 	mcsHome := os.Getenv("MCS_HOME")
 	if mcsHome == "" {
 		mcsHome = filepath.Join(homeDir, ".mcs")
 	}
 
-	if err := os.RemoveAll(mcsHome); err != nil {
-		fmt.Printf("Warning: Failed to remove MCS directory: %v\n", err)
+	dirsToRemove := []string{
+		mcsHome,
+	}
+	
+	for _, dir := range dirsToRemove {
+		if _, err := os.Stat(dir); err == nil {
+			fmt.Printf(dimStyle.Render("  → Removing %s..."), dir)
+			if err := os.RemoveAll(dir); err != nil {
+				fmt.Printf(" %s\n", errorStyle.Render("failed"))
+			} else {
+				fmt.Printf(" %s\n", successStyle.Render("✓"))
+			}
+		}
 	}
 
 	// Remove MCS binary from PATH locations
+	fmt.Println()
+	fmt.Println(dimStyle.Render("Removing MCS binaries..."))
 	pathLocations := []string{
 		"/usr/local/bin/mcs",
 		filepath.Join(homeDir, ".local/bin/mcs"),
@@ -185,11 +265,20 @@ func performDestroy(keepDocker, skipBackup bool) error {
 
 	for _, loc := range pathLocations {
 		if _, err := os.Stat(loc); err == nil {
-			os.Remove(loc)
+			fmt.Printf(dimStyle.Render("  → Removing %s..."), loc)
+			if err := os.Remove(loc); err != nil {
+				fmt.Printf(" %s\n", errorStyle.Render("failed"))
+			} else {
+				fmt.Printf(" %s\n", successStyle.Render("✓"))
+			}
 		}
 	}
 
 	// 6. Clean shell configurations
+	fmt.Println()
+	fmt.Println(infoStyle.Render("🐚 Shell Configuration"))
+	fmt.Println(strings.Repeat("─", 50))
+	
 	progress.Update("Cleaning shell configurations")
 	shellConfigs := []string{
 		filepath.Join(homeDir, ".zshrc"),
@@ -198,13 +287,27 @@ func performDestroy(keepDocker, skipBackup bool) error {
 		filepath.Join(homeDir, ".profile"),
 	}
 
+	fmt.Println(dimStyle.Render("Cleaning shell configuration files..."))
+	cleanedCount := 0
 	for _, configFile := range shellConfigs {
-		if err := cleanShellConfigDestroy(configFile); err != nil {
-			fmt.Printf("Warning: Failed to clean %s: %v\n", configFile, err)
+		if _, err := os.Stat(configFile); err == nil {
+			fmt.Printf(dimStyle.Render("  → Cleaning %s..."), filepath.Base(configFile))
+			if err := cleanShellConfigDestroy(configFile); err != nil {
+				fmt.Printf(" %s\n", errorStyle.Render("failed"))
+			} else {
+				fmt.Printf(" %s\n", successStyle.Render("✓"))
+				cleanedCount++
+			}
 		}
+	}
+	
+	if cleanedCount == 0 {
+		fmt.Println(dimStyle.Render("No shell configurations found"))
 	}
 
 	// 7. Remove helper scripts
+	fmt.Println()
+	fmt.Println(dimStyle.Render("Removing helper scripts..."))
 	scripts := []string{
 		filepath.Join(homeDir, "monitor-system.sh"),
 		filepath.Join(homeDir, ".mcs-install.sh"),
@@ -212,43 +315,73 @@ func performDestroy(keepDocker, skipBackup bool) error {
 
 	for _, script := range scripts {
 		if _, err := os.Stat(script); err == nil {
-			os.Remove(script)
+			fmt.Printf(dimStyle.Render("  → Removing %s..."), filepath.Base(script))
+			if err := os.Remove(script); err != nil {
+				fmt.Printf(" %s\n", errorStyle.Render("failed"))
+			} else {
+				fmt.Printf(" %s\n", successStyle.Render("✓"))
+			}
 		}
 	}
 
 	// 8. Optionally uninstall Docker
 	if !keepDocker {
-		progress.Update("Uninstalling Docker")
+		fmt.Println()
+		fmt.Println(infoStyle.Render("🐳 Docker Uninstallation"))
+		fmt.Println(strings.Repeat("─", 50))
+		
+		progress.Update("Preparing to uninstall Docker")
+		fmt.Println(dimStyle.Render("Removing Docker installation..."))
+		fmt.Println()
+		
 		if err := uninstallDocker(progress); err != nil {
-			fmt.Printf("Warning: Failed to uninstall Docker: %v\n", err)
-			fmt.Println("You may need to uninstall Docker manually")
+			fmt.Println(warningStyle.Render("⚠️  Failed to uninstall Docker completely"))
+			fmt.Println(dimStyle.Render("   You may need to uninstall Docker manually"))
+			fmt.Printf(dimStyle.Render("   Error: %v\n"), err)
 		} else {
-			progress.Update("Uninstalled Docker")
+			fmt.Println(successStyle.Render("✓ Docker uninstalled successfully"))
 		}
 	}
 
 	progress.Success("Destruction complete!")
 
+	// Final summary
 	fmt.Println()
-	fmt.Println(destroyWarningStyle.Render("💥 MCS has been completely destroyed"))
+	fmt.Println(strings.Repeat("═", 50))
+	fmt.Println(destroyWarningStyle.Render("💥 MCS Destruction Complete"))
+	fmt.Println(strings.Repeat("═", 50))
 	fmt.Println()
-	fmt.Println("Removed:")
-	fmt.Println("  ✓ All codespaces and containers")
-	fmt.Println("  ✓ All codespace data")
-	fmt.Println("  ✓ MCS installation")
-	fmt.Println("  ✓ Shell configurations")
+	
+	fmt.Println(boldStyle.Render("Successfully removed:"))
+	fmt.Println()
+	fmt.Println("  " + successStyle.Render("✓") + " All codespaces and containers")
+	fmt.Println("  " + successStyle.Render("✓") + " All codespace data")
+	fmt.Println("  " + successStyle.Render("✓") + " MCS installation files")
+	fmt.Println("  " + successStyle.Render("✓") + " Shell configurations")
+	fmt.Println("  " + successStyle.Render("✓") + " Helper scripts")
 	if !keepDocker {
-		fmt.Println("  ✓ Docker installation")
+		fmt.Println("  " + successStyle.Render("✓") + " Docker installation")
 	}
 	fmt.Println()
 
 	if !skipBackup {
-		fmt.Println("Your codespace data was backed up to: ~/mcs-backup")
-		fmt.Println("You can safely delete this backup when no longer needed.")
+		fmt.Println(strings.Repeat("─", 50))
+		fmt.Println(infoStyle.Render("💾 Backup Information"))
+		fmt.Println()
+		fmt.Println("Your codespace data was backed up to:")
+		fmt.Println(boldStyle.Render("  ~/mcs-backup"))
+		fmt.Println()
+		fmt.Println(dimStyle.Render("You can safely delete this backup when no longer needed."))
 		fmt.Println()
 	}
 
-	fmt.Println("Thank you for using MCS! 👋")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+	fmt.Println(headerStyle.Render("Thank you for using MCS! 👋"))
+	fmt.Println()
+	fmt.Println(dimStyle.Render("If you change your mind, you can reinstall with:"))
+	fmt.Println(dimStyle.Render("  curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash"))
+	fmt.Println()
 
 	return nil
 }
@@ -305,10 +438,12 @@ func uninstallDocker(progress *ui.Progress) error {
 		// macOS - Docker Desktop
 		appPath := "/Applications/Docker.app"
 		if _, err := os.Stat(appPath); err == nil {
+			fmt.Println(dimStyle.Render("  → Stopping Docker Desktop..."))
 			// Stop Docker Desktop
 			exec.Command("osascript", "-e", "quit app \"Docker\"").Run()
 			time.Sleep(2 * time.Second)
 
+			fmt.Println(dimStyle.Render("  → Removing Docker.app..."))
 			// Remove application
 			if err := os.RemoveAll(appPath); err != nil {
 				return err
@@ -323,8 +458,11 @@ func uninstallDocker(progress *ui.Progress) error {
 				filepath.Join(homeDir, "Library/Group Containers/group.com.docker"),
 			}
 
+			fmt.Println(dimStyle.Render("  → Removing Docker data directories..."))
 			for _, dir := range dockerDirs {
-				os.RemoveAll(dir)
+				if _, err := os.Stat(dir); err == nil {
+					os.RemoveAll(dir)
+				}
 			}
 		}
 
@@ -332,8 +470,11 @@ func uninstallDocker(progress *ui.Progress) error {
 		// Stop the spinner before running sudo commands
 		progress.Stop()
 
+		fmt.Println(dimStyle.Render("  → Detecting package manager..."))
+		
 		// Try different package managers
 		if _, err := exec.LookPath("apt-get"); err == nil {
+			fmt.Println(dimStyle.Render("  → Removing Docker packages (apt)..."))
 			// Remove Docker packages
 			cmd := exec.Command("sudo", "apt-get", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
 			cmd.Stdin = os.Stdin
@@ -341,6 +482,7 @@ func uninstallDocker(progress *ui.Progress) error {
 			cmd.Stderr = os.Stderr
 			cmd.Run()
 
+			fmt.Println(dimStyle.Render("  → Purging Docker configuration..."))
 			// Purge Docker packages
 			cmd = exec.Command("sudo", "apt-get", "purge", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
 			cmd.Stdin = os.Stdin
@@ -348,12 +490,14 @@ func uninstallDocker(progress *ui.Progress) error {
 			cmd.Stderr = os.Stderr
 			cmd.Run()
 		} else if _, err := exec.LookPath("yum"); err == nil {
+			fmt.Println(dimStyle.Render("  → Removing Docker packages (yum)..."))
 			cmd := exec.Command("sudo", "yum", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			cmd.Run()
 		} else if _, err := exec.LookPath("dnf"); err == nil {
+			fmt.Println(dimStyle.Render("  → Removing Docker packages (dnf)..."))
 			cmd := exec.Command("sudo", "dnf", "remove", "-y", "docker-ce", "docker-ce-cli", "containerd.io")
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
@@ -361,6 +505,7 @@ func uninstallDocker(progress *ui.Progress) error {
 			cmd.Run()
 		}
 
+		fmt.Println(dimStyle.Render("  → Removing Docker data directories..."))
 		// Remove Docker data
 		cmd := exec.Command("sudo", "rm", "-rf", "/var/lib/docker")
 		cmd.Stdin = os.Stdin
