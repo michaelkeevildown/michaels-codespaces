@@ -400,49 +400,45 @@ EOF
     success "MCS installed successfully!"
     echo ""
     info "Version: $("$BIN_DIR/mcs" version)"
-        echo ""
-        info "Installation details:"
-        echo "  Location: $MCS_HOME"
-        echo "  Binary: $BIN_DIR/mcs"
-        if [ "$GO_AVAILABLE" = true ]; then
-            echo "  Built from: source"
-        else
-            echo "  Built from: pre-built binary"
-        fi
-        echo ""
-        
-        # Add to PATH temporarily for this session so setup can work
-        export PATH="$BIN_DIR:$PATH"
-        
-        # Setup PATH for future sessions
-        setup_path_config
-        
-        # Run setup to configure network and other settings
-        info "Running initial setup..."
-        echo ""
-        if "$BIN_DIR/mcs" setup --bootstrap; then
-            echo ""
-            success "Setup completed!"
-        else
-            warning "Setup encountered issues. You can run 'mcs setup' later to reconfigure."
-        fi
-        
-        echo ""
-        info "Get started with:"
-        echo "  mcs create github.com/user/repo"
-        echo "  mcs list"
-        echo "  mcs --help"
-        echo ""
-        info "Update MCS:"
-        if [ "$GO_AVAILABLE" = true ]; then
-            echo "  mcs update                    # Auto-update via git pull + rebuild"
-            echo "  $BIN_DIR/mcs-update.sh       # Manual update script"
-        else
-            echo "  Install Go first, then run: mcs update"
-        fi
+    echo ""
+    info "Installation details:"
+    echo "  Location: $MCS_HOME"
+    echo "  Binary: $BIN_DIR/mcs"
+    if [ "$GO_AVAILABLE" = true ]; then
+        echo "  Built from: source"
     else
-        error "Installation completed but MCS test failed"
-        exit 1
+        echo "  Built from: pre-built binary"
+    fi
+    echo ""
+    
+    # Add to PATH temporarily for this session so setup can work
+    export PATH="$BIN_DIR:$PATH"
+    
+    # Setup PATH for future sessions
+    setup_path_config
+    
+    # Run setup to configure network and other settings
+    info "Running initial setup..."
+    echo ""
+    if "$BIN_DIR/mcs" setup --bootstrap; then
+        echo ""
+        success "Setup completed!"
+    else
+        warning "Setup encountered issues. You can run 'mcs setup' later to reconfigure."
+    fi
+    
+    echo ""
+    info "Get started with:"
+    echo "  mcs create github.com/user/repo"
+    echo "  mcs list"
+    echo "  mcs --help"
+    echo ""
+    info "Update MCS:"
+    if [ "$GO_AVAILABLE" = true ]; then
+        echo "  mcs update                    # Auto-update via git pull + rebuild"
+        echo "  $BIN_DIR/mcs-update.sh       # Manual update script"
+    else
+        echo "  Install Go first, then run: mcs update"
     fi
 }
 
