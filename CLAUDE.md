@@ -14,7 +14,7 @@
 
 - **Location**: `/mcs-go/` directory
 - **Binary**: Built from `cmd/mcs/main.go`
-- **Installation**: `cd mcs-go && ./install.sh`
+- **Installation**: `curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash`
 - **Language**: Pure Go - no bash scripts
 - **Features**: All features implemented in Go modules
 - **Container naming**: Auto-generated from `owner-repo` format
@@ -955,7 +955,7 @@ mcs-go/
 
 ```bash
 # Installation
-cd mcs-go && ./install.sh
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash
 
 # Usage
 mcs create git@github.com:owner/repo.git  # Creates: owner-repo

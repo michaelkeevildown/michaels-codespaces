@@ -5,10 +5,8 @@ A complete rewrite of Michael's Codespaces in Go, providing isolated, reproducib
 ## 🚀 Quick Start
 
 ```bash
-# Clone and install from source
-git clone https://github.com/yourusername/mcs
-cd mcs/mcs-go
-./install.sh
+# Install with one command
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash
 
 # Create your first codespace
 mcs create https://github.com/facebook/react

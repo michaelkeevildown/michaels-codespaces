@@ -15,16 +15,34 @@
 
 ### Prerequisites
 
-- Go 1.21 or later (for building from source)
 - Docker (for running codespaces)
 - Git
+- Go 1.21 or later (optional - for building from source)
 
-### Building from Source
+### Quick Install
+
+```bash
+# Install with one command
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash
+
+# Or for a specific branch:
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | MCS_BRANCH=feature-branch bash
+```
+
+The installer will:
+- Build from Go source if Go is available
+- Or download a pre-built binary as fallback
+- Set up your PATH automatically
+- Configure shell completions
+
+### Building from Source (Alternative)
+
+If you prefer to build manually:
 
 ```bash
 # Clone the repository
-git clone https://github.com/michaelkeevildown/mcs.git
-cd mcs/mcs-go
+git clone https://github.com/michaelkeevildown/michaels-codespaces.git
+cd michaels-codespaces/mcs-go
 
 # Download dependencies
 go mod download
@@ -34,16 +52,6 @@ make install
 
 # Add to PATH (if not already done)
 export PATH="$HOME/.mcs/bin:$PATH"
-```
-
-### Quick Build
-
-```bash
-# Build for current platform
-make build
-
-# Run directly
-./bin/mcs
 ```
 
 ## Usage
