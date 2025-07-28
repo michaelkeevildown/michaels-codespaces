@@ -189,18 +189,25 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 		hostIP = "localhost"
 	}
 
+	// Calculate dockerfile checksum
+	var dockerfileChecksum string
+	if dockerfile != "" {
+		dockerfileChecksum = dockerfiles.GetDockerfileChecksum(dockerfile)
+	}
+
 	// Create codespace object
 	cs := &Codespace{
-		Name:       opts.Name,
-		Repository: opts.Repository.URL,
-		Path:       codespaceDir,
-		Status:     "created",
-		CreatedAt:  time.Now(),
-		VSCodeURL:  fmt.Sprintf("http://%s:%d", hostIP, allocatedPorts["vscode"]),
-		AppURL:     fmt.Sprintf("http://%s:%d", hostIP, allocatedPorts["app"]),
-		Components: components.GetSelectedIDs(),
-		Language:   language,
-		Password:   password,
+		Name:               opts.Name,
+		Repository:         opts.Repository.URL,
+		Path:               codespaceDir,
+		Status:             "created",
+		CreatedAt:          time.Now(),
+		VSCodeURL:          fmt.Sprintf("http://%s:%d", hostIP, allocatedPorts["vscode"]),
+		AppURL:             fmt.Sprintf("http://%s:%d", hostIP, allocatedPorts["app"]),
+		Components:         components.GetSelectedIDs(),
+		Language:           language,
+		Password:           password,
+		DockerfileChecksum: dockerfileChecksum,
 	}
 
 	// Save metadata

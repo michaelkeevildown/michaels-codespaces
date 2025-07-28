@@ -1,28 +1,33 @@
 package codespace
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/michaelkeevildown/mcs/internal/assets/dockerfiles"
+	"github.com/michaelkeevildown/mcs/internal/components"
 	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/michaelkeevildown/mcs/internal/ports"
 )
 
 // Metadata represents codespace metadata stored on disk
 type Metadata struct {
-	Name       string    `json:"name"`
-	Repository string    `json:"repository"`
-	Path       string    `json:"path"`
-	CreatedAt  time.Time `json:"created_at"`
-	VSCodeURL  string    `json:"vscode_url"`
-	AppURL     string    `json:"app_url"`
-	Components []string  `json:"components"`
-	Language   string    `json:"language"`
-	Password   string    `json:"password"`
+	Name               string    `json:"name"`
+	Repository         string    `json:"repository"`
+	Path               string    `json:"path"`
+	CreatedAt          time.Time `json:"created_at"`
+	VSCodeURL          string    `json:"vscode_url"`
+	AppURL             string    `json:"app_url"`
+	Components         []string  `json:"components"`
+	Language           string    `json:"language"`
+	Password           string    `json:"password"`
+	DockerfileChecksum string    `json:"dockerfile_checksum,omitempty"`
 }
 
 // SaveMetadata saves codespace metadata
@@ -35,15 +40,16 @@ func (m *Manager) SaveMetadata(cs *Codespace) error {
 	}
 
 	metadata := Metadata{
-		Name:       cs.Name,
-		Repository: cs.Repository,
-		Path:       cs.Path,
-		CreatedAt:  cs.CreatedAt,
-		VSCodeURL:  cs.VSCodeURL,
-		AppURL:     cs.AppURL,
-		Components: cs.Components,
-		Language:   cs.Language,
-		Password:   cs.Password,
+		Name:               cs.Name,
+		Repository:         cs.Repository,
+		Path:               cs.Path,
+		CreatedAt:          cs.CreatedAt,
+		VSCodeURL:          cs.VSCodeURL,
+		AppURL:             cs.AppURL,
+		Components:         cs.Components,
+		Language:           cs.Language,
+		Password:           cs.Password,
+		DockerfileChecksum: cs.DockerfileChecksum,
 	}
 
 	data, err := json.MarshalIndent(metadata, "", "  ")
@@ -197,7 +203,61 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 	container, err := dockerClient.GetContainerByName(ctx, containerName)
 	
 	if err == nil {
-		// Container exists, just start it
+		// Container exists, check if rebuild is needed
+		if metadata.DockerfileChecksum != "" {
+			// Load components to determine which dockerfile is being used
+			componentsPath := filepath.Join(metadata.Path, ".mcs", "components.json")
+			var savedComponents []components.Component
+			if data, err := os.ReadFile(componentsPath); err == nil {
+				json.Unmarshal(data, &savedComponents)
+			}
+			
+			// Determine which dockerfile would be used
+			imageInfo := docker.GetImageInfo(metadata.Language, savedComponents)
+			if imageInfo.Dockerfile != "" {
+				currentChecksum := dockerfiles.GetDockerfileChecksum(imageInfo.Dockerfile)
+				
+				// Check if dockerfile has changed
+				if currentChecksum != "" && currentChecksum != metadata.DockerfileChecksum {
+					fmt.Printf("\n🔄 Docker image update available!\n")
+					fmt.Printf("   The Dockerfile has been updated since this codespace was created.\n")
+					fmt.Printf("   Rebuild to get the latest changes? [y/N]: ")
+					
+					reader := bufio.NewReader(os.Stdin)
+					response, _ := reader.ReadString('\n')
+					response = strings.TrimSpace(strings.ToLower(response))
+					
+					if response == "y" || response == "yes" {
+						// Rebuild the image
+						fmt.Println("🔨 Rebuilding Docker image...")
+						composeExecutor := docker.NewComposeExecutor(metadata.Path)
+						if err := composeExecutor.Build(ctx); err != nil {
+							return fmt.Errorf("failed to rebuild image: %w", err)
+						}
+						
+						// Stop and remove old container
+						if container.State == "running" {
+							dockerClient.StopContainer(ctx, container.ID)
+						}
+						dockerClient.RemoveContainer(ctx, container.ID, true)
+						
+						// Create new container with updated image
+						if err := composeExecutor.Up(ctx, true); err != nil {
+							return fmt.Errorf("failed to start container with new image: %w", err)
+						}
+						
+						// Update metadata with new checksum
+						metadata.DockerfileChecksum = currentChecksum
+						m.updateMetadataChecksum(name, currentChecksum)
+						
+						fmt.Println("✅ Container recreated with updated image")
+						return nil
+					}
+				}
+			}
+		}
+		
+		// No rebuild needed, just start if not running
 		if container.State != "running" {
 			return dockerClient.StartContainer(ctx, container.ID)
 		}
@@ -314,4 +374,30 @@ func (m *Manager) GetLogs(ctx context.Context, name string, follow bool) (string
 
 	// TODO: Implement proper log streaming
 	return "Log streaming not yet implemented", nil
+}
+
+// updateMetadataChecksum updates just the dockerfile checksum in metadata
+func (m *Manager) updateMetadataChecksum(name string, checksum string) error {
+	metadata, err := m.loadMetadata(name)
+	if err != nil {
+		return err
+	}
+	
+	metadata.DockerfileChecksum = checksum
+	
+	// Convert back to Codespace for SaveMetadata
+	cs := &Codespace{
+		Name:               metadata.Name,
+		Repository:         metadata.Repository,
+		Path:               metadata.Path,
+		CreatedAt:          metadata.CreatedAt,
+		VSCodeURL:          metadata.VSCodeURL,
+		AppURL:             metadata.AppURL,
+		Components:         metadata.Components,
+		Language:           metadata.Language,
+		Password:           metadata.Password,
+		DockerfileChecksum: checksum,
+	}
+	
+	return m.SaveMetadata(cs)
 }

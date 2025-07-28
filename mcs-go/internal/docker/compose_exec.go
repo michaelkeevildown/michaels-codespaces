@@ -56,6 +56,11 @@ func (ce *ComposeExecutor) Logs(ctx context.Context, follow bool) error {
 	return ce.runCompose(ctx, args...)
 }
 
+// Build runs docker-compose build
+func (ce *ComposeExecutor) Build(ctx context.Context) error {
+	return ce.runCompose(ctx, "build")
+}
+
 // runCompose executes a docker-compose command
 func (ce *ComposeExecutor) runCompose(ctx context.Context, args ...string) error {
 	// Check if docker-compose.yml exists

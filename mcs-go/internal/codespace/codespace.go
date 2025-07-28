@@ -10,17 +10,18 @@ import (
 
 // Codespace represents a development environment
 type Codespace struct {
-	Name       string
-	Repository string
-	Path       string
-	Status     string // running, stopped, error
-	CreatedAt  time.Time
-	VSCodeURL  string
-	AppURL     string
-	Components []string
-	Language   string
-	Password   string
-	VSCodePort int
+	Name               string
+	Repository         string
+	Path               string
+	Status             string // running, stopped, error
+	CreatedAt          time.Time
+	VSCodeURL          string
+	AppURL             string
+	Components         []string
+	Language           string
+	Password           string
+	VSCodePort         int
+	DockerfileChecksum string
 }
 
 // ProgressFunc is a callback for reporting progress

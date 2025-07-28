@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/michaelkeevildown/mcs/internal/codespace"
+	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -139,6 +140,87 @@ func RestartCommand() *cobra.Command {
 				if cs.Password != "" {
 					fmt.Printf("🔑 Password: %s\n", infoStyle.Render(cs.Password))
 				}
+			}
+			
+			return nil
+		},
+	}
+}
+
+// RebuildCommand creates the 'rebuild' command
+func RebuildCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rebuild <name>",
+		Short: "🔨 Rebuild and recreate a codespace container",
+		Long:  "Rebuild the Docker image and recreate the container for a codespace. This is useful when the Dockerfile has been updated.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Show beautiful header
+			ui.ShowHeader()
+			
+			ctx := context.Background()
+			name := args[0]
+			
+			// Create manager
+			manager := codespace.NewManager()
+			
+			// Get codespace to verify it exists
+			cs, err := manager.Get(ctx, name)
+			if err != nil {
+				return fmt.Errorf("codespace not found: %s", name)
+			}
+			
+			// Create progress indicator
+			progress := ui.NewProgress()
+			progress.Start(fmt.Sprintf("Rebuilding image for %s", name))
+			
+			// Create Docker client
+			dockerClient, err := docker.NewClient()
+			if err != nil {
+				progress.Fail("Failed to create Docker client")
+				return err
+			}
+			defer dockerClient.Close()
+			
+			// Build the image
+			composeExecutor := docker.NewComposeExecutor(cs.Path)
+			if err := composeExecutor.Build(ctx); err != nil {
+				progress.Fail("Failed to rebuild image")
+				return fmt.Errorf("failed to rebuild image: %w", err)
+			}
+			
+			progress.Success("Image rebuilt successfully")
+			
+			// Stop and remove old container
+			containerName := fmt.Sprintf("%s-dev", name)
+			container, err := dockerClient.GetContainerByName(ctx, containerName)
+			if err == nil {
+				progress.Start("Stopping old container")
+				if container.State == "running" {
+					dockerClient.StopContainer(ctx, container.ID)
+				}
+				progress.Success("Stopped old container")
+				
+				progress.Start("Removing old container")
+				dockerClient.RemoveContainer(ctx, container.ID, true)
+				progress.Success("Removed old container")
+			}
+			
+			// Create new container with updated image
+			progress.Start("Creating new container")
+			if err := composeExecutor.Up(ctx, true); err != nil {
+				progress.Fail("Failed to create new container")
+				return fmt.Errorf("failed to start container with new image: %w", err)
+			}
+			
+			progress.Success(fmt.Sprintf("Rebuilt and restarted %s", name))
+			
+			// Show URLs
+			fmt.Println()
+			fmt.Printf("🔗 VS Code: %s\n", urlStyle.Render(cs.VSCodeURL))
+			fmt.Printf("🌐 App: %s\n", urlStyle.Render(cs.AppURL))
+			if cs.Password != "" {
+				fmt.Printf("🔑 Password: %s\n", infoStyle.Render(cs.Password))
 			}
 			
 			return nil

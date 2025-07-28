@@ -1,6 +1,7 @@
 package dockerfiles
 
 import (
+	"crypto/sha256"
 	_ "embed"
 	"fmt"
 	"os"
@@ -69,4 +70,28 @@ func IsExtracted(targetDir string) bool {
 	baseFile := filepath.Join(targetDir, "Dockerfile.base")
 	_, err := os.Stat(baseFile)
 	return err == nil
+}
+
+// GetDockerfileChecksum returns the SHA256 checksum of a dockerfile
+func GetDockerfileChecksum(dockerfileName string) string {
+	content, exists := dockerfileMap[dockerfileName]
+	if !exists {
+		return ""
+	}
+	
+	hash := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x", hash)
+}
+
+// DockerfileChecksums returns a map of dockerfile names to their checksums
+func DockerfileChecksums() map[string]string {
+	checksums := make(map[string]string)
+	for name, content := range dockerfileMap {
+		if name == "README.md" {
+			continue // Skip non-dockerfile files
+		}
+		hash := sha256.Sum256([]byte(content))
+		checksums[name] = fmt.Sprintf("%x", hash)
+	}
+	return checksums
 }
