@@ -758,7 +758,9 @@ func configureNetworkAccess() error {
 	
 	// Check if already configured
 	currentConfig := cfg.Get()
-	if currentConfig.IPMode != "localhost" || currentConfig.HostIP != "localhost" {
+	// Skip only if we've moved away from the defaults
+	isDefault := currentConfig.IPMode == "localhost" && currentConfig.HostIP == "localhost"
+	if !isDefault {
 		fmt.Println(successStyle.Render("✓ Network access already configured"))
 		fmt.Printf("%s  Mode: %s, IP: %s\n", infoStyle.Render("ℹ"), currentConfig.IPMode, currentConfig.HostIP)
 		return nil
