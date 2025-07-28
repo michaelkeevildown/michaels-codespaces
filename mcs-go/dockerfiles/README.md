@@ -40,6 +40,9 @@ This approach provides:
 
 When creating a codespace, MCS:
 1. Detects the primary language (Go, Python, Node.js, etc.)
+   - Checks root directory first for language files (go.mod, package.json, etc.)
+   - Also scans subdirectories for monorepos and nested projects
+   - Supports common patterns like `mcs-go/`, `backend/`, `api/`, etc.
 2. Checks which components are selected
 3. Determines if Node.js is required (for Claude Code, Claude Flow)
 4. Selects the optimal image:

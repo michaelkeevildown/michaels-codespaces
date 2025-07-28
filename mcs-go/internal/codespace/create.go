@@ -301,6 +301,7 @@ func detectLanguage(projectPath string) string {
 		"dotnet":     {"*.csproj", "*.fsproj", "*.vbproj"},
 	}
 
+	// First, check root directory
 	for language, files := range checks {
 		for _, file := range files {
 			// Handle glob patterns
@@ -312,6 +313,59 @@ func detectLanguage(projectPath string) string {
 			} else {
 				if _, err := os.Stat(filepath.Join(projectPath, file)); err == nil {
 					return language
+				}
+			}
+		}
+	}
+
+	// If no language detected at root, check subdirectories
+	// Common subdirectory patterns to check
+	subdirPatterns := []string{
+		"*",           // Check all immediate subdirectories
+		"backend",     // Common backend directory
+		"api",         // API directory
+		"server",      // Server directory
+		"app",         // Application directory
+		"src",         // Source directory
+		"*-go",        // Go-specific patterns like mcs-go
+		"*-api",       // API subdirectories
+		"*-backend",   // Backend subdirectories
+		"services/*",  // Microservices pattern
+		"packages/*",  // Monorepo pattern
+	}
+
+	for _, pattern := range subdirPatterns {
+		var dirsToCheck []string
+		
+		if strings.Contains(pattern, "*") {
+			// Handle glob patterns
+			matches, _ := filepath.Glob(filepath.Join(projectPath, pattern))
+			dirsToCheck = append(dirsToCheck, matches...)
+		} else {
+			// Direct directory path
+			dirsToCheck = append(dirsToCheck, filepath.Join(projectPath, pattern))
+		}
+
+		for _, dir := range dirsToCheck {
+			// Skip if not a directory
+			info, err := os.Stat(dir)
+			if err != nil || !info.IsDir() {
+				continue
+			}
+
+			// Check for language files in this subdirectory
+			for language, files := range checks {
+				for _, file := range files {
+					if strings.Contains(file, "*") {
+						matches, _ := filepath.Glob(filepath.Join(dir, file))
+						if len(matches) > 0 {
+							return language
+						}
+					} else {
+						if _, err := os.Stat(filepath.Join(dir, file)); err == nil {
+							return language
+						}
+					}
 				}
 			}
 		}
