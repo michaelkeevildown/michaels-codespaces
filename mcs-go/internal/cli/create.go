@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/components"
-	"github.com/michaelkeevildown/mcs/internal/config"
 	"github.com/michaelkeevildown/mcs/internal/ui"
 	"github.com/michaelkeevildown/mcs/pkg/utils"
 	"github.com/spf13/cobra"
@@ -123,93 +121,30 @@ If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 }
 
 func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progress *ui.Progress) (*codespace.Codespace, error) {
-	tasks := []struct {
-		name string
-		fn   func() error
-	}{
-		{
-			name: "Creating directory structure",
-			fn: func() error {
-				return os.MkdirAll(opts.GetPath(), 0755)
-			},
-		},
-		{
-			name: "Cloning repository",
-			fn: func() error {
-				// TODO: Implement git clone with progress
-				time.Sleep(2 * time.Second) // Simulate
-				return nil
-			},
-		},
-		{
-			name: "Detecting project type",
-			fn: func() error {
-				// TODO: Implement language/framework detection
-				time.Sleep(500 * time.Millisecond) // Simulate
-				return nil
-			},
-		},
-		{
-			name: "Generating Docker configuration",
-			fn: func() error {
-				// TODO: Implement Docker compose generation
-				time.Sleep(1 * time.Second) // Simulate
-				return nil
-			},
-		},
-		{
-			name: "Setting up components",
-			fn: func() error {
-				// TODO: Implement component installation
-				time.Sleep(1 * time.Second) // Simulate
-				return nil
-			},
-		},
-	}
-
-	// Execute tasks with progress
-	for _, task := range tasks {
-		progress.Start(task.name)
-		if err := task.fn(); err != nil {
-			progress.Fail(fmt.Sprintf("%s failed", task.name))
-			return nil, err
-		}
-		progress.Success(task.name)
-	}
-
-	if !opts.NoStart {
-		progress.Start("Starting services")
-		// TODO: Implement Docker container start
-		time.Sleep(2 * time.Second) // Simulate
-		progress.Success("Services started")
-	}
-
-	// Generate secure password
-	password := utils.GenerateSecurePassword()
+	// Create a new codespace manager
+	manager := codespace.NewManager()
 	
-	// Get configured host IP
-	cfg, err := config.NewManager()
+	// The actual Create method will handle all these steps internally:
+	// 1. Creating directory structure
+	// 2. Cloning repository
+	// 3. Detecting project type
+	// 4. Generating Docker configuration
+	// 5. Setting up components
+	// 6. Starting services (if not --no-start)
+	
+	// Since the Create method doesn't expose granular progress,
+	// we'll show a general progress message
+	progress.Start("Creating codespace")
+	
+	// Call the actual Create method which does all the work
+	cs, err := manager.Create(ctx, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-	hostIP := cfg.GetHostIP()
-	if hostIP == "" {
-		hostIP = "localhost"
+		progress.Fail("Failed to create codespace")
+		return nil, err
 	}
 	
-	// Create codespace object
-	cs := &codespace.Codespace{
-		Name:       opts.Name,
-		Repository: opts.Repository.URL,
-		Path:       opts.GetPath(),
-		Status:     "running",
-		CreatedAt:  time.Now(),
-		VSCodeURL:  fmt.Sprintf("http://%s:8080", hostIP),
-		AppURL:     fmt.Sprintf("http://%s:3000", hostIP),
-		Password:   password,
-		VSCodePort: 8080,
-	}
-
+	progress.Success("Codespace created")
+	
 	return cs, nil
 }
 
