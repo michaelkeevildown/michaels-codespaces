@@ -13,6 +13,7 @@ type Component struct {
 	Selected    bool
 	Installer   string
 	DependsOn   []string
+	Requires    []string // System requirements (e.g., "nodejs", "python")
 }
 
 // Registry holds all available components
@@ -24,6 +25,7 @@ var Registry = []Component{
 		Emoji:       "🤖",
 		Selected:    true,
 		Installer:   "claude.sh",
+		Requires:    []string{"nodejs"},
 	},
 	{
 		ID:          "claude-flow",
@@ -33,6 +35,7 @@ var Registry = []Component{
 		Selected:    true,
 		Installer:   "claude-flow.sh",
 		DependsOn:   []string{"claude"},
+		Requires:    []string{"nodejs"},
 	},
 	{
 		ID:          "github-cli",
@@ -41,6 +44,7 @@ var Registry = []Component{
 		Emoji:       "🐙",
 		Selected:    true,
 		Installer:   "github-cli.sh",
+		Requires:    []string{}, // No special requirements
 	},
 }
 
@@ -74,4 +78,24 @@ func GetSelectedIDs() []string {
 		}
 	}
 	return ids
+}
+
+// GetSystemRequirements returns unique system requirements for selected components
+func GetSystemRequirements() []string {
+	reqMap := make(map[string]bool)
+	
+	for _, c := range Registry {
+		if c.Selected {
+			for _, req := range c.Requires {
+				reqMap[req] = true
+			}
+		}
+	}
+	
+	var requirements []string
+	for req := range reqMap {
+		requirements = append(requirements, req)
+	}
+	
+	return requirements
 }

@@ -78,7 +78,7 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (*Codespace, e
 	dockerConfig := docker.ComposeConfig{
 		ContainerName: fmt.Sprintf("%s-dev", opts.Name),
 		CodespaceName: opts.Name,
-		Image:         docker.GetImageForLanguage(language),
+		Image:         docker.GetImageForLanguage(language, opts.Components),
 		Password:      password,
 		Ports: map[string]string{
 			fmt.Sprintf("%d", allocatedPorts["vscode"]): "8080",

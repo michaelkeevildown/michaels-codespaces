@@ -24,16 +24,28 @@ type ComposeConfig struct {
 	WorkingDir    string
 }
 
-// Default images for different languages
+// Default images for different languages (without Node.js)
 var languageImages = map[string]string{
-	"python":     "codercom/code-server:latest",
-	"node":       "codercom/code-server:latest",
-	"go":         "codercom/code-server:latest",
-	"rust":       "codercom/code-server:latest",
-	"java":       "codercom/code-server:latest",
-	"php":        "codercom/code-server:latest",
-	"ruby":       "codercom/code-server:latest",
-	"default":    "codercom/code-server:latest",
+	"python":     "mcs/code-server-python:latest",
+	"node":       "mcs/code-server-node:latest",
+	"go":         "mcs/code-server-go:latest",
+	"rust":       "mcs/code-server-base:latest", // TODO: Create Rust image
+	"java":       "mcs/code-server-base:latest", // TODO: Create Java image
+	"php":        "mcs/code-server-base:latest", // TODO: Create PHP image
+	"ruby":       "mcs/code-server-base:latest", // TODO: Create Ruby image
+	"generic":    "mcs/code-server-base:latest",
+}
+
+// Images with Node.js included (for components that require it)
+var languageImagesWithNode = map[string]string{
+	"python":     "mcs/code-server-python-node:latest",
+	"node":       "mcs/code-server-node:latest", // Already has Node.js
+	"go":         "mcs/code-server-go-node:latest",
+	"rust":       "mcs/code-server-node:latest", // Use Node image for now
+	"java":       "mcs/code-server-node:latest", // Use Node image for now
+	"php":        "mcs/code-server-node:latest", // Use Node image for now
+	"ruby":       "mcs/code-server-node:latest", // Use Node image for now
+	"generic":    "mcs/code-server-node:latest",
 }
 
 const dockerComposeTemplate = `services:
@@ -160,11 +172,37 @@ func GenerateInitScript(comps []components.Component) ([]byte, error) {
 }
 
 // GetImageForLanguage returns the appropriate Docker image for a language
-func GetImageForLanguage(language string) string {
-	if image, ok := languageImages[strings.ToLower(language)]; ok {
+// Now considers component requirements
+func GetImageForLanguage(language string, components []components.Component) string {
+	// Check if any selected component requires Node.js
+	needsNode := false
+	for _, comp := range components {
+		if comp.Selected {
+			for _, req := range comp.Requires {
+				if req == "nodejs" {
+					needsNode = true
+					break
+				}
+			}
+		}
+		if needsNode {
+			break
+		}
+	}
+	
+	// Select appropriate image based on language and requirements
+	lang := strings.ToLower(language)
+	if needsNode {
+		if image, ok := languageImagesWithNode[lang]; ok {
+			return image
+		}
+		return languageImagesWithNode["generic"]
+	}
+	
+	if image, ok := languageImages[lang]; ok {
 		return image
 	}
-	return languageImages["default"]
+	return languageImages["generic"]
 }
 
 // GenerateEnvFile generates a .env file for the codespace
