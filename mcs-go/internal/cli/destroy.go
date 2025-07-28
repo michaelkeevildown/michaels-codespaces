@@ -139,7 +139,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 			fmt.Println(dimStyle.Render("   Continuing without backup..."))
 		} else {
 			progress.Update("Created backup")
-			fmt.Println(successStyle.Render("✓ Backup created in ~/mcs-backup"))
+			fmt.Println(successStyle.Render("✓ Backup created in ~/.mcs.backup"))
 			fmt.Println(dimStyle.Render("  Your data is safe and can be restored later"))
 		}
 	}
@@ -369,7 +369,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 		fmt.Println(infoStyle.Render("💾 Backup Information"))
 		fmt.Println()
 		fmt.Println("Your codespace data was backed up to:")
-		fmt.Println(boldStyle.Render("  ~/mcs-backup"))
+		fmt.Println(boldStyle.Render("  ~/.mcs.backup"))
 		fmt.Println()
 		fmt.Println(dimStyle.Render("You can safely delete this backup when no longer needed."))
 		fmt.Println()
@@ -389,7 +389,7 @@ func performDestroy(keepDocker, skipBackup bool) error {
 func createBackup() error {
 	homeDir := os.Getenv("HOME")
 	codespacesDir := filepath.Join(homeDir, "codespaces")
-	backupDir := filepath.Join(homeDir, "mcs-backup")
+	backupDir := filepath.Join(homeDir, ".mcs.backup")
 
 	// Check if codespaces directory exists
 	if _, err := os.Stat(codespacesDir); os.IsNotExist(err) {
