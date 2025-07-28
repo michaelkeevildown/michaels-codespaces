@@ -7,9 +7,11 @@ LABEL description="MCS Go development environment"
 # Switch to root for Go installation
 USER root
 
-# Install Go
+# Install Go with architecture detection
+ARG TARGETARCH
 ENV GO_VERSION=1.21.5
-RUN wget -O go.tar.gz "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz" && \
+RUN GOARCH=${TARGETARCH:-amd64} && \
+    wget -O go.tar.gz "https://golang.org/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz" && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz
 

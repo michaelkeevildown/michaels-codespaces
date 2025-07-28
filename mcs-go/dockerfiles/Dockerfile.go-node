@@ -12,9 +12,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Go
+# Install Go with architecture detection
+ARG TARGETARCH
 ENV GO_VERSION=1.21.5
-RUN wget -O go.tar.gz "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz" && \
+RUN GOARCH=${TARGETARCH:-amd64} && \
+    wget -O go.tar.gz "https://golang.org/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz" && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz
 
