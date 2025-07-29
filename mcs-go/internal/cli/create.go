@@ -20,6 +20,7 @@ func CreateCommand() *cobra.Command {
 	var (
 		noStart      bool
 		skipSelector bool
+		cloneDepth   int
 	)
 
 	cmd := &cobra.Command{
@@ -35,9 +36,15 @@ The repository can be specified as:
 
 Codespace names are automatically generated from the repository owner and name.
 If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
-		Example: `  # Create from GitHub repository
+		Example: `  # Create from GitHub repository (default: 20 commits)
   mcs create facebook/react
   # Creates: facebook-react
+  
+  # Create with full Git history
+  mcs create --depth -1 facebook/react
+  
+  # Create with custom shallow depth
+  mcs create --depth 50 git@github.com:user/repo.git
   
   # Create from SSH URL
   mcs create git@github.com:michaelkeevildown/michaels-codespaces.git
@@ -99,6 +106,7 @@ If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 				Repository: repo,
 				Components: selectedComponents,
 				NoStart:    noStart,
+				CloneDepth: cloneDepth,
 			}
 
 			// Create codespace with progress tracking
@@ -108,7 +116,7 @@ If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 			}
 
 			// Show success message
-			showSuccess(cs)
+			showSuccess(cs, cloneDepth)
 			
 			return nil
 		},
@@ -117,6 +125,7 @@ If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 	// Note: --name flag has been removed - names are auto-generated from repository
 	cmd.Flags().BoolVar(&noStart, "no-start", false, "Don't start the codespace after creation")
 	cmd.Flags().BoolVar(&skipSelector, "skip-selector", false, "Skip component selection (use defaults)")
+	cmd.Flags().IntVar(&cloneDepth, "depth", 0, "Git clone depth (0 for full clone, default: 20 commits)")
 
 	return cmd
 }
@@ -157,10 +166,23 @@ func createWithProgress(ctx context.Context, opts codespace.CreateOptions, progr
 	return cs, nil
 }
 
-func showSuccess(cs *codespace.Codespace) {
+func showSuccess(cs *codespace.Codespace, cloneDepth int) {
 	fmt.Println()
 	fmt.Println("✨ Codespace created successfully!")
 	fmt.Println()
+	
+	// Determine Git clone info
+	var gitInfo string
+	actualDepth := cloneDepth
+	if actualDepth == 0 {
+		actualDepth = 20 // Default
+	}
+	
+	if actualDepth < 0 {
+		gitInfo = "Full clone (complete history)"
+	} else {
+		gitInfo = fmt.Sprintf("Shallow clone (%d commits)", actualDepth)
+	}
 	
 	// Calculate the maximum width needed
 	lines := []struct {
@@ -172,6 +194,7 @@ func showSuccess(cs *codespace.Codespace) {
 		{"🔗", "VS Code", cs.VSCodeURL},
 		{"🔑", "Password", cs.Password},
 		{"📂", "Path", cs.Path},
+		{"📌", "Git", gitInfo},
 	}
 	
 	// Find the longest line
@@ -224,5 +247,18 @@ func showSuccess(cs *codespace.Codespace) {
 	fmt.Printf("  • Open VS Code: mcs open %s\n", cs.Name)
 	fmt.Printf("  • View logs: mcs logs %s\n", cs.Name)
 	fmt.Printf("  • Stop when done: mcs stop %s\n", cs.Name)
+	
+	// Add Git-specific tip if shallow clone
+	if cloneDepth >= 0 {
+		actualDepth := cloneDepth
+		if actualDepth == 0 {
+			actualDepth = 20
+		}
+		fmt.Println()
+		fmt.Println("📋 Git History:")
+		fmt.Printf("  • To fetch full history, run inside the codespace:\n")
+		fmt.Printf("    git fetch --unshallow\n")
+	}
+	
 	fmt.Println()
 }

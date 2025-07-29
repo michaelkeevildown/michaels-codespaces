@@ -260,19 +260,25 @@ func createDirectoryStructure(basePath string, hasComponents bool) error {
 
 // cloneRepository clones the repository with progress tracking
 func cloneRepository(ctx context.Context, url, path string, depth int) error {
-	// Set default depth if not specified
-	if depth == 0 {
-		depth = 1 // Shallow clone by default for faster cloning
-	}
-	
 	cloneOpts := git.CloneOptions{
 		URL:   url,
 		Path:  path,
-		Depth: depth,
 		Progress: func(msg string) {
 			// Progress is now handled by the main progress tracker
 		},
 	}
+	
+	// Handle depth:
+	// - 0 or negative: full clone (no depth limit)
+	// - positive: shallow clone with specified depth
+	// - not specified in CLI (0): defaults to 20
+	if depth > 0 {
+		cloneOpts.Depth = depth
+	} else if depth == 0 {
+		// Default to 20 commits if not specified
+		cloneOpts.Depth = 20
+	}
+	// If depth < 0, don't set Depth field (full clone)
 
 	err := git.Clone(ctx, cloneOpts)
 	if err != nil {
