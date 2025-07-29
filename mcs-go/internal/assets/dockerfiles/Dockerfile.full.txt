@@ -50,6 +50,20 @@ RUN pip3 install --upgrade pip virtualenv pipenv poetry && \
 # Fix ownership of installed Go tools
 RUN chown -R coder:coder /home/coder/go
 
+# Make Go available system-wide
+RUN echo 'export PATH="/usr/local/go/bin:${PATH}"' >> /etc/profile.d/go.sh && \
+    echo 'export GOPATH="/home/coder/go"' >> /etc/profile.d/go.sh && \
+    echo 'export PATH="${GOPATH}/bin:${PATH}"' >> /etc/profile.d/go.sh && \
+    chmod +x /etc/profile.d/go.sh
+
+# Add Go paths to coder user's bashrc
+RUN echo '' >> /home/coder/.bashrc && \
+    echo '# Go environment' >> /home/coder/.bashrc && \
+    echo 'export PATH="/usr/local/go/bin:${PATH}"' >> /home/coder/.bashrc && \
+    echo 'export GOPATH="/home/coder/go"' >> /home/coder/.bashrc && \
+    echo 'export PATH="${GOPATH}/bin:${PATH}"' >> /home/coder/.bashrc && \
+    chown coder:coder /home/coder/.bashrc
+
 # Install Java (OpenJDK)
 RUN apt-get update && apt-get install -y \
     openjdk-17-jdk \
