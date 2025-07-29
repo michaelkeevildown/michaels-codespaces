@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/components"
 	"github.com/michaelkeevildown/mcs/internal/ui"
@@ -211,7 +212,8 @@ func showSuccess(cs *codespace.Codespace, cloneDepth int) {
 	maxWidth := 0
 	for _, line := range lines {
 		// Calculate: "│  icon label: value  │"
-		lineWidth := 2 + len(line.icon) + 1 + len(line.label) + 2 + len(line.value) + 2 + 1
+		// Use runewidth to properly calculate visual width of Unicode characters
+		lineWidth := 2 + runewidth.StringWidth(line.icon) + 1 + runewidth.StringWidth(line.label) + 2 + runewidth.StringWidth(line.value) + 2 + 1
 		if lineWidth > maxWidth {
 			maxWidth = lineWidth
 		}
@@ -229,7 +231,9 @@ func showSuccess(cs *codespace.Codespace, cloneDepth int) {
 	
 	// Helper function to pad line to box width
 	padLine := func(content string) string {
-		padding := maxWidth - len(content) - 2
+		// Use runewidth to calculate visual width for proper padding
+		contentWidth := runewidth.StringWidth(content)
+		padding := maxWidth - contentWidth - 2
 		if padding < 0 {
 			padding = 0
 		}
