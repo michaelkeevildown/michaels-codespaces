@@ -1,4 +1,4 @@
-.PHONY: build install clean test run dev
+.PHONY: build install clean test test-unit test-integration test-e2e test-coverage test-clean test-bench run dev
 
 # Variables
 BINARY_NAME=mcs
@@ -44,10 +44,53 @@ dev:
 run: build
 	@./bin/$(BINARY_NAME)
 
-# Run tests
+# Run all tests
 test:
-	@echo "🧪 Running tests..."
+	@echo "🧪 Running all tests..."
 	@go test -v ./...
+
+# Run unit tests with coverage
+test-unit:
+	@echo "🧪 Running unit tests with coverage..."
+	@mkdir -p test/coverage/unit test/reports
+	@go test -race -coverprofile=test/coverage/unit/coverage.out -covermode=atomic ./...
+	@go tool cover -html=test/coverage/unit/coverage.out -o test/reports/coverage.html
+	@echo "✅ Unit tests complete - coverage report: test/reports/coverage.html"
+
+# Run integration tests
+test-integration:
+	@echo "🧪 Running integration tests..."
+	@mkdir -p test/coverage/integration test/reports
+	@go test -tags=integration -race -coverprofile=test/coverage/integration/coverage.out -covermode=atomic ./...
+	@echo "✅ Integration tests complete"
+
+# Run end-to-end tests
+test-e2e:
+	@echo "🧪 Running end-to-end tests..."
+	@mkdir -p test/coverage/e2e test/reports
+	@go test -tags=e2e -race -coverprofile=test/coverage/e2e/coverage.out -covermode=atomic ./...
+	@echo "✅ End-to-end tests complete"
+
+# Generate comprehensive coverage report
+test-coverage:
+	@echo "📊 Generating coverage reports..."
+	@./test/scripts/coverage.sh
+	@echo "✅ Coverage reports generated"
+
+# Run benchmarks
+test-bench:
+	@echo "⚡ Running benchmarks..."
+	@mkdir -p test/reports
+	@go test -bench=. -benchmem -cpuprofile=test/reports/cpu.prof -memprofile=test/reports/mem.prof ./...
+	@echo "✅ Benchmarks complete"
+
+# Clean test artifacts
+test-clean:
+	@echo "🧹 Cleaning test artifacts..."
+	@rm -rf test/coverage/unit/*.out test/coverage/integration/*.out test/coverage/e2e/*.out
+	@rm -rf test/reports/*.html test/reports/*.xml test/reports/*.json test/reports/*.prof
+	@rm -rf test/fixtures/temp test/integration/temp .test-cache
+	@echo "✅ Test artifacts cleaned"
 
 # Clean build artifacts
 clean:

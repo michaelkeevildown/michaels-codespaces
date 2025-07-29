@@ -1,0 +1,6 @@
+/home/coder/michaelkeevildown-michaels-codespaces/mcs-go/internal/backup/backup_test.go
+/home/coder/michaelkeevildown-michaels-codespaces/mcs-go/internal/cli/commands_test.go
+/home/coder/michaelkeevildown-michaels-codespaces/mcs-go/internal/cli/create_test.go
+/home/coder/michaelkeevildown-michaels-codespaces/mcs-go/internal/cli/list_test.go
+/home/coder/michaelkeevildown-michaels-codespaces/mcs-go/pkg/utils/names_test.go
+/home/coder/michaelkeevildown-michaels-codespaces/mcs-go/pkg/utils/repository_test.go

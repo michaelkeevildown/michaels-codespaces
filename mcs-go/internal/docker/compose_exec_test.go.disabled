@@ -1,0 +1,744 @@
+package docker
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// MockComposeExecutor for testing
+type MockComposeExecutor struct {
+	workDir string
+	// Track calls for verification
+	upCalls    []bool
+	downCalls  int
+	startCalls int
+	stopCalls  int
+	logsCalls  []bool
+	buildCalls int
+}
+
+func NewMockComposeExecutor(workDir string) *MockComposeExecutor {
+	return &MockComposeExecutor{
+		workDir: workDir,
+	}
+}
+
+func (m *MockComposeExecutor) Up(ctx context.Context, detached bool) error {
+	m.upCalls = append(m.upCalls, detached)
+	return nil
+}
+
+func (m *MockComposeExecutor) Down(ctx context.Context) error {
+	m.downCalls++
+	return nil
+}
+
+func (m *MockComposeExecutor) Start(ctx context.Context) error {
+	m.startCalls++
+	return nil
+}
+
+func (m *MockComposeExecutor) Stop(ctx context.Context) error {
+	m.stopCalls++
+	return nil
+}
+
+func (m *MockComposeExecutor) Logs(ctx context.Context, follow bool) error {
+	m.logsCalls = append(m.logsCalls, follow)
+	return nil
+}
+
+func (m *MockComposeExecutor) Build(ctx context.Context) error {
+	m.buildCalls++
+	return nil
+}
+
+// TestNewComposeExecutor tests the NewComposeExecutor function
+func TestNewComposeExecutor(t *testing.T) {
+	workDir := "/test/work/dir"
+	executor := NewComposeExecutor(workDir)
+
+	assert.NotNil(t, executor)
+	assert.Equal(t, workDir, executor.workDir)
+}
+
+// TestComposeExecutor_Up tests the Up method
+func TestComposeExecutor_Up(t *testing.T) {
+	// Create temporary directory for testing
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		detached   bool
+		workDir    string
+		setupFile  bool
+		expectError bool
+	}{
+		{
+			name:       "Up with detached flag",
+			detached:   true,
+			workDir:    tempDir,
+			setupFile:  true,
+			expectError: true, // Will fail because docker might not be available
+		},
+		{
+			name:       "Up without detached flag",
+			detached:   false,
+			workDir:    tempDir,
+			setupFile:  true,
+			expectError: true, // Will fail because docker might not be available
+		},
+		{
+			name:       "Up with missing compose file",
+			detached:   true,
+			workDir:    "/nonexistent/dir",
+			setupFile:  false,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executor := NewComposeExecutor(tt.workDir)
+			ctx := context.Background()
+
+			err := executor.Up(ctx, tt.detached)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestComposeExecutor_Down tests the Down method
+func TestComposeExecutor_Down(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	err = executor.Down(ctx)
+	// This will likely fail because docker is not available in test environment
+	// but we're testing the method exists and handles the call properly
+	assert.Error(t, err) // Expected to fail without Docker
+}
+
+// TestComposeExecutor_Start tests the Start method
+func TestComposeExecutor_Start(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	err = executor.Start(ctx)
+	assert.Error(t, err) // Expected to fail without Docker
+}
+
+// TestComposeExecutor_Stop tests the Stop method
+func TestComposeExecutor_Stop(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	err = executor.Stop(ctx)
+	assert.Error(t, err) // Expected to fail without Docker
+}
+
+// TestComposeExecutor_Logs tests the Logs method
+func TestComposeExecutor_Logs(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		follow      bool
+		expectError bool
+	}{
+		{
+			name:        "Logs with follow",
+			follow:      true,
+			expectError: true,
+		},
+		{
+			name:        "Logs without follow",
+			follow:      false,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executor := NewComposeExecutor(tempDir)
+			ctx := context.Background()
+
+			err := executor.Logs(ctx, tt.follow)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestComposeExecutor_Build tests the Build method
+func TestComposeExecutor_Build(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file with build context
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	err = executor.Build(ctx)
+	assert.Error(t, err) // Expected to fail without Docker
+}
+
+// TestComposeExecutor_runCompose tests the runCompose method indirectly
+func TestComposeExecutor_runCompose_MissingFile(t *testing.T) {
+	// Test with nonexistent directory
+	executor := NewComposeExecutor("/nonexistent/directory")
+	ctx := context.Background()
+
+	err := executor.Up(ctx, false)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "docker-compose.yml not found")
+}
+
+// TestComposeExecutor_runCompose_ArgumentConstruction tests argument construction
+func TestComposeExecutor_runCompose_ArgumentConstruction(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	// Test different operations to ensure they construct arguments correctly
+	// These will fail to execute but should not fail argument construction
+	
+	err = executor.Up(ctx, true) // Should include -d flag
+	assert.Error(t, err)
+	
+	err = executor.Up(ctx, false) // Should not include -d flag
+	assert.Error(t, err)
+	
+	err = executor.Logs(ctx, true) // Should include -f flag
+	assert.Error(t, err)
+	
+	err = executor.Logs(ctx, false) // Should not include -f flag
+	assert.Error(t, err)
+}
+
+// TestIsComposeAvailable tests the IsComposeAvailable function
+func TestIsComposeAvailable(t *testing.T) {
+	available, version := IsComposeAvailable()
+	
+	// The result depends on the test environment
+	// We just verify the function returns valid values
+	assert.IsType(t, true, available)
+	assert.IsType(t, "", version)
+	
+	if available {
+		assert.NotEmpty(t, version)
+		assert.True(t, version == "docker compose" || version == "docker-compose")
+	} else {
+		assert.Empty(t, version)
+	}
+}
+
+// TestComposeExecutor_WorkingDirectory tests working directory handling
+func TestComposeExecutor_WorkingDirectory(t *testing.T) {
+	tests := []struct {
+		name    string
+		workDir string
+	}{
+		{
+			name:    "Absolute path",
+			workDir: "/home/user/project",
+		},
+		{
+			name:    "Relative path",
+			workDir: "./project",
+		},
+		{
+			name:    "Current directory",
+			workDir: ".",
+		},
+		{
+			name:    "Empty directory",
+			workDir: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executor := NewComposeExecutor(tt.workDir)
+			assert.Equal(t, tt.workDir, executor.workDir)
+		})
+	}
+}
+
+// TestComposeExecutor_ContextCancellation tests context cancellation
+func TestComposeExecutor_ContextCancellation(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	err = executor.Up(ctx, false)
+	assert.Error(t, err)
+	// The error could be either from the cancelled context or from docker not being available
+	// We just verify that the method handles cancelled contexts without panicking
+}
+
+// TestComposeExecutor_EmptyWorkDir tests behavior with empty work directory
+func TestComposeExecutor_EmptyWorkDir(t *testing.T) {
+	executor := NewComposeExecutor("")
+	ctx := context.Background()
+
+	err := executor.Up(ctx, false)
+	assert.Error(t, err)
+	// Should fail because it looks for docker-compose.yml in current directory
+}
+
+// TestComposeExecutor_InvalidWorkDir tests behavior with invalid work directory
+func TestComposeExecutor_InvalidWorkDir(t *testing.T) {
+	// Use a path that definitely doesn't exist
+	invalidDir := "/this/path/should/never/exist/12345"
+	executor := NewComposeExecutor(invalidDir)
+	ctx := context.Background()
+
+	err := executor.Up(ctx, false)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "docker-compose.yml not found")
+}
+
+// TestComposeExecutor_AllMethods tests all methods exist and are callable
+func TestComposeExecutor_AllMethods(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a minimal docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: hello-world
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	// Test all methods exist and are callable (they'll fail due to no Docker, but that's expected)
+	methods := []func() error{
+		func() error { return executor.Up(ctx, false) },
+		func() error { return executor.Down(ctx) },
+		func() error { return executor.Start(ctx) },
+		func() error { return executor.Stop(ctx) },
+		func() error { return executor.Logs(ctx, false) },
+		func() error { return executor.Build(ctx) },
+	}
+
+	for i, method := range methods {
+		err := method()
+		// All methods should return an error (no Docker available in test environment)
+		// but they should not panic
+		assert.Error(t, err, "Method %d should return an error", i)
+	}
+}
+
+// TestComposeExecutor_ComposeFileValidation tests docker-compose.yml file validation
+func TestComposeExecutor_ComposeFileValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		composeContent string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "Valid compose file",
+			composeContent: `services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+`,
+			expectError: true, // Will fail because Docker not available, but file validation passes
+		},
+		{
+			name:           "Empty compose file",
+			composeContent: "",
+			expectError:    true, // Will fail because Docker not available
+		},
+		{
+			name:          "No compose file",
+			composeContent: "", // We won't create a file
+			expectError:   true,
+			errorContains: "docker-compose.yml not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			executor := NewComposeExecutor(tempDir)
+			ctx := context.Background()
+
+			if tt.name != "No compose file" {
+				// Create compose file
+				composeFile := filepath.Join(tempDir, "docker-compose.yml")
+				err := os.WriteFile(composeFile, []byte(tt.composeContent), 0644)
+				assert.NoError(t, err)
+			}
+
+			err := executor.Up(ctx, false)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Mock exec.Command for testing command construction
+type mockCmd struct {
+	name string
+	args []string
+	dir  string
+}
+
+func (m *mockCmd) Run() error {
+	return nil
+}
+
+// TestComposeExecutor_CommandConstruction tests that the right commands are constructed
+func TestComposeExecutor_CommandConstruction(t *testing.T) {
+	// This test verifies the logic of command construction without actually executing
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	
+	// Test that the compose file exists check works
+	composePath := filepath.Join(executor.workDir, "docker-compose.yml")
+	_, err = os.Stat(composePath)
+	assert.NoError(t, err, "docker-compose.yml should exist")
+}
+
+// Benchmark tests
+func BenchmarkNewComposeExecutor(b *testing.B) {
+	workDir := "/test/work/dir"
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewComposeExecutor(workDir)
+	}
+}
+
+func BenchmarkComposeExecutor_FileCheck(b *testing.B) {
+	tempDir := b.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	executor := NewComposeExecutor(tempDir)
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		composePath := filepath.Join(executor.workDir, "docker-compose.yml")
+		_, _ = os.Stat(composePath)
+	}
+}
+
+// Integration-style tests (these will fail without Docker but test the integration points)
+func TestComposeExecutor_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
+
+	tempDir := t.TempDir()
+	
+	// Create a simple docker-compose.yml
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  hello:
+    image: hello-world
+    restart: "no"
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	// These tests will fail if Docker is not available, but they test the integration
+	t.Log("Testing Up command...")
+	err = executor.Up(ctx, true)
+	if err != nil {
+		t.Logf("Up failed (expected without Docker): %v", err)
+	}
+
+	t.Log("Testing Down command...")
+	err = executor.Down(ctx)
+	if err != nil {
+		t.Logf("Down failed (expected without Docker): %v", err)
+	}
+
+	t.Log("Testing Build command...")
+	err = executor.Build(ctx)
+	if err != nil {
+		t.Logf("Build failed (expected without Docker): %v", err)
+	}
+}
+
+// TestComposeExecutor_DockerComposeV1Fallback tests the fallback to docker-compose v1
+func TestComposeExecutor_DockerComposeV1Fallback(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	// This test verifies that the fallback mechanism is in place
+	// It will fail because neither docker compose nor docker-compose are available
+	// but it tests the error handling path
+	err = executor.Up(ctx, false)
+	assert.Error(t, err)
+	
+	// The error should indicate either docker compose or docker-compose failed
+	errorMsg := err.Error()
+	assert.True(t, 
+		strings.Contains(errorMsg, "docker compose failed") || 
+		strings.Contains(errorMsg, "docker-compose failed") ||
+		strings.Contains(errorMsg, "docker compose is not a docker command"),
+		"Error should indicate docker compose failure: %s", errorMsg)
+}
+
+// TestComposeExecutor_Concurrency tests concurrent operations
+func TestComposeExecutor_Concurrency(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create a docker-compose.yml file
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	composeContent := `services:
+  test:
+    image: nginx:latest
+`
+	err := os.WriteFile(composeFile, []byte(composeContent), 0644)
+	assert.NoError(t, err)
+
+	executor := NewComposeExecutor(tempDir)
+	ctx := context.Background()
+
+	// Run multiple operations concurrently
+	const numGoroutines = 10
+	done := make(chan bool, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			defer func() { done <- true }()
+			// Each goroutine tries different operations
+			_ = executor.Up(ctx, true)
+			_ = executor.Stop(ctx)
+			_ = executor.Start(ctx)
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Test passes if no panics occurred
+}
+
+// TestComposeExecutor_EdgeCases tests various edge cases
+func TestComposeExecutor_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupDir    func() string
+		expectError bool
+	}{
+		{
+			name: "Directory with spaces in name",
+			setupDir: func() string {
+				tempDir := t.TempDir()
+				spacedDir := filepath.Join(tempDir, "directory with spaces")
+				err := os.Mkdir(spacedDir, 0755)
+				assert.NoError(t, err)
+				
+				composeFile := filepath.Join(spacedDir, "docker-compose.yml")
+				err = os.WriteFile(composeFile, []byte("services:\n  test:\n    image: nginx"), 0644)
+				assert.NoError(t, err)
+				
+				return spacedDir
+			},
+			expectError: true, // Will fail due to no Docker
+		},
+		{
+			name: "Very long directory path",
+			setupDir: func() string {
+				tempDir := t.TempDir()
+				longPath := tempDir
+				for i := 0; i < 10; i++ {
+					longPath = filepath.Join(longPath, "very-long-directory-name-segment")
+				}
+				err := os.MkdirAll(longPath, 0755)
+				assert.NoError(t, err)
+				
+				composeFile := filepath.Join(longPath, "docker-compose.yml")
+				err = os.WriteFile(composeFile, []byte("services:\n  test:\n    image: nginx"), 0644)
+				assert.NoError(t, err)
+				
+				return longPath
+			},
+			expectError: true, // Will fail due to no Docker
+		},
+		{
+			name: "Directory with special characters",
+			setupDir: func() string {
+				tempDir := t.TempDir()
+				specialDir := filepath.Join(tempDir, "dir-with-special-chars_123")
+				err := os.Mkdir(specialDir, 0755)
+				assert.NoError(t, err)
+				
+				composeFile := filepath.Join(specialDir, "docker-compose.yml")
+				err = os.WriteFile(composeFile, []byte("services:\n  test:\n    image: nginx"), 0644)
+				assert.NoError(t, err)
+				
+				return specialDir
+			},
+			expectError: true, // Will fail due to no Docker
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workDir := tt.setupDir()
+			executor := NewComposeExecutor(workDir)
+			ctx := context.Background()
+
+			err := executor.Up(ctx, false)
+			
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

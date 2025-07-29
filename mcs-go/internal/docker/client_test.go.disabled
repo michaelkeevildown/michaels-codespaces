@@ -1,0 +1,1577 @@
+package docker
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+// DockerClientInterface defines the interface for Docker operations
+type DockerClientInterface interface {
+	Ping(context.Context) (types.Ping, error)
+	ContainerList(context.Context, types.ContainerListOptions) ([]types.Container, error)
+	ContainerStart(context.Context, string, types.ContainerStartOptions) error
+	ContainerStop(context.Context, string, container.StopOptions) error
+	ContainerRemove(context.Context, string, types.ContainerRemoveOptions) error
+	ContainerLogs(context.Context, string, types.ContainerLogsOptions) (io.ReadCloser, error)
+	ContainerCreate(context.Context, *container.Config, *container.HostConfig, interface{}, interface{}, string) (container.CreateResponse, error)
+	ContainerStatsOneShot(context.Context, string) (types.ContainerStats, error)
+	ContainerExecCreate(context.Context, string, types.ExecConfig) (types.IDResponse, error)
+	ContainerExecAttach(context.Context, string, types.ExecStartCheck) (types.HijackedResponse, error)
+	Info(context.Context) (types.Info, error)
+	NetworkList(context.Context, types.NetworkListOptions) ([]types.NetworkResource, error)
+	NetworkCreate(context.Context, string, types.NetworkCreate) (types.NetworkCreateResponse, error)
+	Close() error
+}
+
+// MockDockerClient is a mock implementation of the Docker client interface
+type MockDockerClient struct {
+	mock.Mock
+}
+
+// Ping mocks the Ping method
+func (m *MockDockerClient) Ping(ctx context.Context) (types.Ping, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(types.Ping), args.Error(1)
+}
+
+// ContainerList mocks the ContainerList method
+func (m *MockDockerClient) ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error) {
+	args := m.Called(ctx, options)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]types.Container), args.Error(1)
+}
+
+// ContainerStart mocks the ContainerStart method
+func (m *MockDockerClient) ContainerStart(ctx context.Context, containerID string, options types.ContainerStartOptions) error {
+	args := m.Called(ctx, containerID, options)
+	return args.Error(0)
+}
+
+// ContainerStop mocks the ContainerStop method
+func (m *MockDockerClient) ContainerStop(ctx context.Context, containerID string, options container.StopOptions) error {
+	args := m.Called(ctx, containerID, options)
+	return args.Error(0)
+}
+
+// ContainerRemove mocks the ContainerRemove method
+func (m *MockDockerClient) ContainerRemove(ctx context.Context, containerID string, options types.ContainerRemoveOptions) error {
+	args := m.Called(ctx, containerID, options)
+	return args.Error(0)
+}
+
+// ContainerLogs mocks the ContainerLogs method
+func (m *MockDockerClient) ContainerLogs(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error) {
+	args := m.Called(ctx, container, options)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(io.ReadCloser), args.Error(1)
+}
+
+// ContainerCreate mocks the ContainerCreate method
+func (m *MockDockerClient) ContainerCreate(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig interface{}, platform interface{}, containerName string) (container.CreateResponse, error) {
+	args := m.Called(ctx, config, hostConfig, networkingConfig, platform, containerName)
+	return args.Get(0).(container.CreateResponse), args.Error(1)
+}
+
+// ContainerStatsOneShot mocks the ContainerStatsOneShot method
+func (m *MockDockerClient) ContainerStatsOneShot(ctx context.Context, containerID string) (types.ContainerStats, error) {
+	args := m.Called(ctx, containerID)
+	return args.Get(0).(types.ContainerStats), args.Error(1)
+}
+
+// ContainerExecCreate mocks the ContainerExecCreate method
+func (m *MockDockerClient) ContainerExecCreate(ctx context.Context, container string, config types.ExecConfig) (types.IDResponse, error) {
+	args := m.Called(ctx, container, config)
+	return args.Get(0).(types.IDResponse), args.Error(1)
+}
+
+// ContainerExecAttach mocks the ContainerExecAttach method
+func (m *MockDockerClient) ContainerExecAttach(ctx context.Context, execID string, config types.ExecStartCheck) (types.HijackedResponse, error) {
+	args := m.Called(ctx, execID, config)
+	return args.Get(0).(types.HijackedResponse), args.Error(1)
+}
+
+// Info mocks the Info method
+func (m *MockDockerClient) Info(ctx context.Context) (types.Info, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(types.Info), args.Error(1)
+}
+
+// NetworkList mocks the NetworkList method
+func (m *MockDockerClient) NetworkList(ctx context.Context, options types.NetworkListOptions) ([]types.NetworkResource, error) {
+	args := m.Called(ctx, options)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]types.NetworkResource), args.Error(1)
+}
+
+// NetworkCreate mocks the NetworkCreate method
+func (m *MockDockerClient) NetworkCreate(ctx context.Context, name string, options types.NetworkCreate) (types.NetworkCreateResponse, error) {
+	args := m.Called(ctx, name, options)
+	return args.Get(0).(types.NetworkCreateResponse), args.Error(1)
+}
+
+// Close mocks the Close method
+func (m *MockDockerClient) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+// mockStatsReader is a mock implementation of io.ReadCloser for stats
+type mockStatsReader struct {
+	data   []byte
+	closed bool
+}
+
+func newMockStatsReader(stats types.StatsJSON) io.ReadCloser {
+	data, _ := json.Marshal(stats)
+	return &mockStatsReader{data: data}
+}
+
+func (r *mockStatsReader) Read(p []byte) (n int, err error) {
+	if r.closed {
+		return 0, io.EOF
+	}
+	n = copy(p, r.data)
+	r.data = r.data[n:]
+	if len(r.data) == 0 {
+		err = io.EOF
+	}
+	return
+}
+
+func (r *mockStatsReader) Close() error {
+	r.closed = true
+	return nil
+}
+
+// TestNewClient tests the NewClient function
+func TestNewClient(t *testing.T) {
+	// Since NewClient creates a real client, we can't easily test it without Docker
+	// We'll skip this test if Docker is not available
+	t.Skip("Skipping NewClient test - requires Docker daemon")
+}
+
+// TestClient_Close tests the Close method
+func TestClient_Close(t *testing.T) {
+	mockCli := new(MockDockerClient)
+	mockCli.On("Close").Return(nil)
+
+	c := &Client{cli: mockCli}
+	err := c.Close()
+
+	assert.NoError(t, err)
+	mockCli.AssertExpectations(t)
+}
+
+// TestClient_ListContainers tests the ListContainers method
+func TestClient_ListContainers(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name         string
+		labelFilter  string
+		mockResponse []types.Container
+		mockError    error
+		expected     []ContainerStatus
+		expectError  bool
+		errorMsg     string
+	}{
+		{
+			name:        "List containers with filter",
+			labelFilter: "mcs.managed=true",
+			mockResponse: []types.Container{
+				{
+					ID:      "abc123def456789",
+					Names:   []string{"/mcs-test-project"},
+					Status:  "Up 2 hours",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "mcs/code-server:latest",
+					Ports: []types.Port{
+						{
+							PrivatePort: 8080,
+							PublicPort:  8443,
+						},
+						{
+							PrivatePort: 3000,
+							PublicPort:  3000,
+						},
+					},
+				},
+			},
+			expected: []ContainerStatus{
+				{
+					ID:      "abc123def456",
+					Name:    "mcs-test-project",
+					Status:  "Up 2 hours",
+					State:   "running",
+					Ports:   []string{"8443:8080", "3000:3000"},
+					Created: time.Now().Unix(),
+					Image:   "mcs/code-server:latest",
+					Stats:   nil,
+				},
+			},
+		},
+		{
+			name:         "List containers without filter",
+			labelFilter:  "",
+			mockResponse: []types.Container{
+				{
+					ID:      "xyz789abc123456",
+					Names:   []string{"/another-container"},
+					Status:  "Exited (0) 5 minutes ago",
+					State:   "exited",
+					Created: time.Now().Add(-5 * time.Minute).Unix(),
+					Image:   "nginx:latest",
+					Ports:   []types.Port{},
+				},
+			},
+			expected: []ContainerStatus{
+				{
+					ID:      "xyz789abc123",
+					Name:    "another-container",
+					Status:  "Exited (0) 5 minutes ago",
+					State:   "exited",
+					Ports:   []string{},
+					Created: time.Now().Add(-5 * time.Minute).Unix(),
+					Image:   "nginx:latest",
+					Stats:   nil,
+				},
+			},
+		},
+		{
+			name:         "Empty container list",
+			labelFilter:  "mcs.managed=true",
+			mockResponse: []types.Container{},
+			expected:     []ContainerStatus{},
+		},
+		{
+			name:        "Error listing containers",
+			labelFilter: "",
+			mockError:   errors.New("docker daemon error"),
+			expectError: true,
+			errorMsg:    "failed to list containers",
+		},
+		{
+			name:        "Container with no public ports",
+			labelFilter: "",
+			mockResponse: []types.Container{
+				{
+					ID:      "container123456789",
+					Names:   []string{"/no-ports"},
+					Status:  "Up 1 hour",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "busybox:latest",
+					Ports: []types.Port{
+						{
+							PrivatePort: 80,
+							PublicPort:  0, // No public port
+						},
+					},
+				},
+			},
+			expected: []ContainerStatus{
+				{
+					ID:      "container123",
+					Name:    "no-ports",
+					Status:  "Up 1 hour",
+					State:   "running",
+					Ports:   []string{},
+					Created: time.Now().Unix(),
+					Image:   "busybox:latest",
+					Stats:   nil,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			// Setup expected options
+			expectedOpts := types.ContainerListOptions{All: true}
+			if tt.labelFilter != "" {
+				filterArgs := filters.NewArgs()
+				filterArgs.Add("label", tt.labelFilter)
+				expectedOpts.Filters = filterArgs
+			}
+
+			if tt.mockError != nil {
+				mockCli.On("ContainerList", ctx, mock.MatchedBy(func(opts types.ContainerListOptions) bool {
+					return opts.All == expectedOpts.All
+				})).Return(nil, tt.mockError)
+			} else {
+				mockCli.On("ContainerList", ctx, mock.MatchedBy(func(opts types.ContainerListOptions) bool {
+					return opts.All == expectedOpts.All
+				})).Return(tt.mockResponse, nil)
+			}
+
+			c := &Client{cli: mockCli}
+			result, err := c.ListContainers(ctx, tt.labelFilter)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, len(tt.expected), len(result))
+
+				for i, expected := range tt.expected {
+					assert.Equal(t, expected.ID, result[i].ID)
+					assert.Equal(t, expected.Name, result[i].Name)
+					assert.Equal(t, expected.Status, result[i].Status)
+					assert.Equal(t, expected.State, result[i].State)
+					assert.Equal(t, expected.Image, result[i].Image)
+					assert.Equal(t, expected.Ports, result[i].Ports)
+				}
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_StartContainer tests the StartContainer method
+func TestClient_StartContainer(t *testing.T) {
+	ctx := context.Background()
+	containerID := "abc123def456"
+
+	tests := []struct {
+		name        string
+		mockError   error
+		expectError bool
+	}{
+		{
+			name:        "Successfully start container",
+			mockError:   nil,
+			expectError: false,
+		},
+		{
+			name:        "Error starting container",
+			mockError:   errors.New("container already started"),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+			mockCli.On("ContainerStart", ctx, containerID, types.ContainerStartOptions{}).Return(tt.mockError)
+
+			c := &Client{cli: mockCli}
+			err := c.StartContainer(ctx, containerID)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_StopContainer tests the StopContainer method
+func TestClient_StopContainer(t *testing.T) {
+	ctx := context.Background()
+	containerID := "abc123def456"
+	timeout := 30
+
+	tests := []struct {
+		name        string
+		mockError   error
+		expectError bool
+	}{
+		{
+			name:        "Successfully stop container",
+			mockError:   nil,
+			expectError: false,
+		},
+		{
+			name:        "Error stopping container",
+			mockError:   errors.New("container not running"),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+			
+			expectedOpts := container.StopOptions{
+				Timeout: &timeout,
+			}
+			mockCli.On("ContainerStop", ctx, containerID, expectedOpts).Return(tt.mockError)
+
+			c := &Client{cli: mockCli}
+			err := c.StopContainer(ctx, containerID)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_RemoveContainer tests the RemoveContainer method
+func TestClient_RemoveContainer(t *testing.T) {
+	ctx := context.Background()
+	containerID := "abc123def456"
+
+	tests := []struct {
+		name        string
+		force       bool
+		mockError   error
+		expectError bool
+	}{
+		{
+			name:        "Successfully remove container",
+			force:       false,
+			mockError:   nil,
+			expectError: false,
+		},
+		{
+			name:        "Force remove container",
+			force:       true,
+			mockError:   nil,
+			expectError: false,
+		},
+		{
+			name:        "Error removing container",
+			force:       false,
+			mockError:   errors.New("container is running"),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+			
+			expectedOpts := types.ContainerRemoveOptions{
+				Force:         tt.force,
+				RemoveVolumes: true,
+			}
+			mockCli.On("ContainerRemove", ctx, containerID, expectedOpts).Return(tt.mockError)
+
+			c := &Client{cli: mockCli}
+			err := c.RemoveContainer(ctx, containerID, tt.force)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_GetContainerLogs tests the GetContainerLogs method
+func TestClient_GetContainerLogs(t *testing.T) {
+	ctx := context.Background()
+	containerID := "abc123def456"
+
+	tests := []struct {
+		name         string
+		follow       bool
+		mockResponse io.ReadCloser
+		mockError    error
+		expectError  bool
+	}{
+		{
+			name:         "Get logs without follow",
+			follow:       false,
+			mockResponse: io.NopCloser(strings.NewReader("container logs here")),
+			mockError:    nil,
+			expectError:  false,
+		},
+		{
+			name:         "Get logs with follow",
+			follow:       true,
+			mockResponse: io.NopCloser(strings.NewReader("streaming logs...")),
+			mockError:    nil,
+			expectError:  false,
+		},
+		{
+			name:        "Error getting logs",
+			follow:      false,
+			mockError:   errors.New("container not found"),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+			
+			expectedOpts := types.ContainerLogsOptions{
+				ShowStdout: true,
+				ShowStderr: true,
+				Follow:     tt.follow,
+				Timestamps: true,
+			}
+
+			if tt.mockError != nil {
+				mockCli.On("ContainerLogs", ctx, containerID, expectedOpts).Return(nil, tt.mockError)
+			} else {
+				mockCli.On("ContainerLogs", ctx, containerID, expectedOpts).Return(tt.mockResponse, nil)
+			}
+
+			c := &Client{cli: mockCli}
+			result, err := c.GetContainerLogs(ctx, containerID, tt.follow)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				result.Close()
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_RunContainer tests the RunContainer method
+func TestClient_RunContainer(t *testing.T) {
+	ctx := context.Background()
+	containerName := "test-container"
+
+	tests := []struct {
+		name              string
+		config            *container.Config
+		hostConfig        *container.HostConfig
+		createResponse    container.CreateResponse
+		createError       error
+		startError        error
+		expectError       bool
+		expectedErrorMsg  string
+	}{
+		{
+			name: "Successfully create and start container",
+			config: &container.Config{
+				Image: "nginx:latest",
+			},
+			hostConfig: &container.HostConfig{},
+			createResponse: container.CreateResponse{
+				ID: "container123456",
+			},
+			createError: nil,
+			startError:  nil,
+			expectError: false,
+		},
+		{
+			name: "Error creating container",
+			config: &container.Config{
+				Image: "invalid:image",
+			},
+			hostConfig:       &container.HostConfig{},
+			createError:      errors.New("image not found"),
+			expectError:      true,
+			expectedErrorMsg: "failed to create container",
+		},
+		{
+			name: "Error starting container",
+			config: &container.Config{
+				Image: "nginx:latest",
+			},
+			hostConfig: &container.HostConfig{},
+			createResponse: container.CreateResponse{
+				ID: "container123456",
+			},
+			createError:      nil,
+			startError:       errors.New("port already in use"),
+			expectError:      true,
+			expectedErrorMsg: "failed to start container",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			// Mock ContainerCreate
+			if tt.createError != nil {
+				mockCli.On("ContainerCreate", ctx, tt.config, tt.hostConfig, nil, nil, containerName).
+					Return(container.CreateResponse{}, tt.createError)
+			} else {
+				mockCli.On("ContainerCreate", ctx, tt.config, tt.hostConfig, nil, nil, containerName).
+					Return(tt.createResponse, nil)
+
+				// Mock ContainerStart
+				mockCli.On("ContainerStart", ctx, tt.createResponse.ID, types.ContainerStartOptions{}).
+					Return(tt.startError)
+
+				// If start fails, mock ContainerRemove for cleanup
+				if tt.startError != nil {
+					mockCli.On("ContainerRemove", ctx, tt.createResponse.ID, types.ContainerRemoveOptions{Force: true}).
+						Return(nil)
+				}
+			}
+
+			c := &Client{cli: mockCli}
+			result, err := c.RunContainer(ctx, tt.config, tt.hostConfig, containerName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+				assert.Empty(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.createResponse.ID, result)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_GetContainerByName tests the GetContainerByName method
+func TestClient_GetContainerByName(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name           string
+		containerName  string
+		mockContainers []types.Container
+		mockError      error
+		expectError    bool
+		expectedID     string
+	}{
+		{
+			name:          "Find container by name",
+			containerName: "mcs-test-project",
+			mockContainers: []types.Container{
+				{
+					ID:      "abc123456789",
+					Names:   []string{"/mcs-test-project"},
+					Status:  "Up 2 hours",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "mcs/code-server:latest",
+				},
+				{
+					ID:      "def789123456",
+					Names:   []string{"/another-container"},
+					Status:  "Up 1 hour",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "nginx:latest",
+				},
+			},
+			expectError: false,
+			expectedID:  "abc123456789",
+		},
+		{
+			name:          "Container not found",
+			containerName: "non-existent",
+			mockContainers: []types.Container{
+				{
+					ID:    "abc123456789",
+					Names: []string{"/mcs-test-project"},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name:          "Error listing containers",
+			containerName: "test",
+			mockError:     errors.New("docker error"),
+			expectError:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			// Setup ListContainers mock
+			expectedOpts := types.ContainerListOptions{All: true}
+			if tt.mockError != nil {
+				mockCli.On("ContainerList", ctx, expectedOpts).Return(nil, tt.mockError)
+			} else {
+				mockCli.On("ContainerList", ctx, expectedOpts).Return(tt.mockContainers, nil)
+			}
+
+			c := &Client{cli: mockCli}
+			result, err := c.GetContainerByName(ctx, tt.containerName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.containerName, result.Name)
+				assert.Contains(t, tt.expectedID, result.ID)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_GetSystemInfo tests the GetSystemInfo method
+func TestClient_GetSystemInfo(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name         string
+		mockResponse types.Info
+		mockError    error
+		expected     *SystemInfo
+		expectError  bool
+	}{
+		{
+			name: "Successfully get system info",
+			mockResponse: types.Info{
+				Containers:    15,
+				Images:        25,
+				ServerVersion: "20.10.7",
+			},
+			expected: &SystemInfo{
+				Containers: 15,
+				Images:     25,
+				Version:    "20.10.7",
+			},
+			expectError: false,
+		},
+		{
+			name:        "Error getting system info",
+			mockError:   errors.New("permission denied"),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			if tt.mockError != nil {
+				mockCli.On("Info", ctx).Return(types.Info{}, tt.mockError)
+			} else {
+				mockCli.On("Info", ctx).Return(tt.mockResponse, nil)
+			}
+
+			c := &Client{cli: mockCli}
+			result, err := c.GetSystemInfo(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "failed to get system info")
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_GetContainerStats tests the GetContainerStats method
+func TestClient_GetContainerStats(t *testing.T) {
+	ctx := context.Background()
+	containerID := "abc123def456"
+
+	tests := []struct {
+		name        string
+		statsJSON   types.StatsJSON
+		mockError   error
+		expected    *ContainerStats
+		expectError bool
+	}{
+		{
+			name: "Successfully get container stats",
+			statsJSON: types.StatsJSON{
+				CPUStats: types.CPUStats{
+					CPUUsage: types.CPUUsage{
+						TotalUsage:  2000000000,
+						PercpuUsage: []uint64{1000000000, 1000000000},
+					},
+					SystemUsage: 20000000000,
+				},
+				PreCPUStats: types.CPUStats{
+					CPUUsage: types.CPUUsage{
+						TotalUsage: 1000000000,
+					},
+					SystemUsage: 10000000000,
+				},
+				MemoryStats: types.MemoryStats{
+					Usage: 536870912,   // 512 MB
+					Limit: 1073741824,  // 1 GB
+				},
+			},
+			expected: &ContainerStats{
+				CPUPercent:    20.0, // (2000000000-1000000000)/(20000000000-10000000000) * 2 * 100
+				MemoryUsage:   536870912,
+				MemoryLimit:   1073741824,
+				MemoryPercent: 50.0,
+			},
+			expectError: false,
+		},
+		{
+			name:        "Error getting stats",
+			mockError:   errors.New("container not running"),
+			expectError: true,
+		},
+		{
+			name: "Zero CPU usage",
+			statsJSON: types.StatsJSON{
+				CPUStats: types.CPUStats{
+					CPUUsage: types.CPUUsage{
+						TotalUsage:  0,
+						PercpuUsage: []uint64{0},
+					},
+					SystemUsage: 0,
+				},
+				PreCPUStats: types.CPUStats{
+					CPUUsage: types.CPUUsage{
+						TotalUsage: 0,
+					},
+					SystemUsage: 0,
+				},
+				MemoryStats: types.MemoryStats{
+					Usage: 0,
+					Limit: 1073741824,
+				},
+			},
+			expected: &ContainerStats{
+				CPUPercent:    0.0,
+				MemoryUsage:   0,
+				MemoryLimit:   1073741824,
+				MemoryPercent: 0.0,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			if tt.mockError != nil {
+				mockCli.On("ContainerStatsOneShot", ctx, containerID).
+					Return(types.ContainerStats{}, tt.mockError)
+			} else {
+				statsReader := newMockStatsReader(tt.statsJSON)
+				mockCli.On("ContainerStatsOneShot", ctx, containerID).
+					Return(types.ContainerStats{Body: statsReader}, nil)
+			}
+
+			c := &Client{cli: mockCli}
+			result, err := c.GetContainerStats(ctx, containerID)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), "failed to get container stats")
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.InDelta(t, tt.expected.CPUPercent, result.CPUPercent, 0.01)
+				assert.Equal(t, tt.expected.MemoryUsage, result.MemoryUsage)
+				assert.Equal(t, tt.expected.MemoryLimit, result.MemoryLimit)
+				assert.InDelta(t, tt.expected.MemoryPercent, result.MemoryPercent, 0.01)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_ExecInteractive tests the ExecInteractive method
+func TestClient_ExecInteractive(t *testing.T) {
+	ctx := context.Background()
+	containerID := "abc123def456"
+
+	tests := []struct {
+		name             string
+		cmd              []string
+		createError      error
+		attachError      error
+		expectError      bool
+		expectedErrorMsg string
+	}{
+		{
+			name:             "Interactive exec not implemented",
+			cmd:              []string{"sh"},
+			createError:      nil,
+			attachError:      nil,
+			expectError:      true,
+			expectedErrorMsg: "interactive exec not yet fully implemented",
+		},
+		{
+			name:             "Error creating exec",
+			cmd:              []string{"bash"},
+			createError:      errors.New("container not found"),
+			expectError:      true,
+			expectedErrorMsg: "failed to create exec",
+		},
+		{
+			name: "Error attaching to exec",
+			cmd:  []string{"sh"},
+			createError: nil,
+			attachError: errors.New("connection refused"),
+			expectError: true,
+			expectedErrorMsg: "failed to attach to exec",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			expectedConfig := types.ExecConfig{
+				Cmd:          tt.cmd,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+				Tty:          true,
+			}
+
+			if tt.createError != nil {
+				mockCli.On("ContainerExecCreate", ctx, containerID, expectedConfig).
+					Return(types.IDResponse{}, tt.createError)
+			} else {
+				execID := "exec123456"
+				mockCli.On("ContainerExecCreate", ctx, containerID, expectedConfig).
+					Return(types.IDResponse{ID: execID}, nil)
+
+				if tt.attachError != nil {
+					mockCli.On("ContainerExecAttach", ctx, execID, types.ExecStartCheck{Tty: true}).
+						Return(types.HijackedResponse{}, tt.attachError)
+				} else {
+					// Mock successful attach but setupTerminal will fail
+					mockCli.On("ContainerExecAttach", ctx, execID, types.ExecStartCheck{Tty: true}).
+						Return(types.HijackedResponse{}, nil)
+				}
+			}
+
+			c := &Client{cli: mockCli}
+			err := c.ExecInteractive(ctx, containerID, tt.cmd)
+
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestCreatePortBindings tests the CreatePortBindings function
+func TestCreatePortBindings(t *testing.T) {
+	tests := []struct {
+		name        string
+		ports       map[string]string
+		expectError bool
+		validate    func(t *testing.T, portMap nat.PortMap, portSet nat.PortSet)
+	}{
+		{
+			name: "Valid port mappings",
+			ports: map[string]string{
+				"8080": "80",
+				"3000": "3000",
+			},
+			expectError: false,
+			validate: func(t *testing.T, portMap nat.PortMap, portSet nat.PortSet) {
+				// Check port 80
+				port80, _ := nat.NewPort("tcp", "80")
+				assert.Contains(t, portSet, port80)
+				assert.Len(t, portMap[port80], 1)
+				assert.Equal(t, "0.0.0.0", portMap[port80][0].HostIP)
+				assert.Equal(t, "8080", portMap[port80][0].HostPort)
+
+				// Check port 3000
+				port3000, _ := nat.NewPort("tcp", "3000")
+				assert.Contains(t, portSet, port3000)
+				assert.Len(t, portMap[port3000], 1)
+				assert.Equal(t, "0.0.0.0", portMap[port3000][0].HostIP)
+				assert.Equal(t, "3000", portMap[port3000][0].HostPort)
+			},
+		},
+		{
+			name:        "Empty port mappings",
+			ports:       map[string]string{},
+			expectError: false,
+			validate: func(t *testing.T, portMap nat.PortMap, portSet nat.PortSet) {
+				assert.Empty(t, portMap)
+				assert.Empty(t, portSet)
+			},
+		},
+		{
+			name: "Invalid port number",
+			ports: map[string]string{
+				"8080": "invalid",
+			},
+			expectError: true,
+		},
+		{
+			name: "Port out of range",
+			ports: map[string]string{
+				"8080": "99999",
+			},
+			expectError: true,
+		},
+		{
+			name: "Single port mapping",
+			ports: map[string]string{
+				"443": "443",
+			},
+			expectError: false,
+			validate: func(t *testing.T, portMap nat.PortMap, portSet nat.PortSet) {
+				port443, _ := nat.NewPort("tcp", "443")
+				assert.Contains(t, portSet, port443)
+				assert.Len(t, portMap[port443], 1)
+				assert.Equal(t, "443", portMap[port443][0].HostPort)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			portMap, portSet, err := CreatePortBindings(tt.ports)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, portMap)
+				assert.Nil(t, portSet)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, portMap)
+				assert.NotNil(t, portSet)
+				if tt.validate != nil {
+					tt.validate(t, portMap, portSet)
+				}
+			}
+		})
+	}
+}
+
+// TestClient_CreateDockerNetwork tests the CreateDockerNetwork method
+func TestClient_CreateDockerNetwork(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name            string
+		existingNetwork bool
+		listError       error
+		createError     error
+		expectError     bool
+	}{
+		{
+			name:            "Network already exists",
+			existingNetwork: true,
+			expectError:     false,
+		},
+		{
+			name:            "Successfully create network",
+			existingNetwork: false,
+			expectError:     false,
+		},
+		{
+			name:        "Error listing networks",
+			listError:   errors.New("permission denied"),
+			expectError: true,
+		},
+		{
+			name:            "Error creating network",
+			existingNetwork: false,
+			createError:     errors.New("network name already taken"),
+			expectError:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			// Mock NetworkList
+			if tt.listError != nil {
+				mockCli.On("NetworkList", ctx, types.NetworkListOptions{}).
+					Return(nil, tt.listError)
+			} else {
+				networks := []types.NetworkResource{}
+				if tt.existingNetwork {
+					networks = append(networks, types.NetworkResource{
+						Name: "mcs-network",
+					})
+				}
+				mockCli.On("NetworkList", ctx, types.NetworkListOptions{}).
+					Return(networks, nil)
+
+				// Mock NetworkCreate only if network doesn't exist
+				if !tt.existingNetwork {
+					expectedCreate := types.NetworkCreate{
+						CheckDuplicate: true,
+						Driver:         "bridge",
+						Labels: map[string]string{
+							"mcs.managed": "true",
+						},
+					}
+					mockCli.On("NetworkCreate", ctx, "mcs-network", expectedCreate).
+						Return(types.NetworkCreateResponse{}, tt.createError)
+				}
+			}
+
+			c := &Client{cli: mockCli}
+			err := c.CreateDockerNetwork(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestableClient wraps a Client to allow for testing
+type TestableClient struct {
+	cli DockerClientInterface
+}
+
+// Helper to create a mock Docker client for testing
+func newMockDockerClient(t *testing.T) (*TestableClient, *MockDockerClient) {
+	mockCli := new(MockDockerClient)
+	return &TestableClient{cli: mockCli}, mockCli
+}
+
+// Forward methods to match the Client interface
+func (c *TestableClient) ListContainers(ctx context.Context, labelFilter string) ([]ContainerStatus, error) {
+	opts := types.ContainerListOptions{
+		All: true,
+	}
+
+	if labelFilter != "" {
+		filterArgs := filters.NewArgs()
+		filterArgs.Add("label", labelFilter)
+		opts.Filters = filterArgs
+	}
+
+	containers, err := c.cli.ContainerList(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	var statuses []ContainerStatus
+	for _, cont := range containers {
+		name := ""
+		if len(cont.Names) > 0 {
+			name = strings.TrimPrefix(cont.Names[0], "/")
+		}
+
+		var ports []string
+		for _, p := range cont.Ports {
+			if p.PublicPort != 0 {
+				ports = append(ports, fmt.Sprintf("%d:%d", p.PublicPort, p.PrivatePort))
+			}
+		}
+
+		statuses = append(statuses, ContainerStatus{
+			ID:      cont.ID[:12],
+			Name:    name,
+			Status:  cont.Status,
+			State:   cont.State,
+			Ports:   ports,
+			Created: cont.Created,
+			Image:   cont.Image,
+			Stats:   nil,
+		})
+	}
+
+	return statuses, nil
+}
+
+func (c *TestableClient) StartContainer(ctx context.Context, containerID string) error {
+	return c.cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
+}
+
+func (c *TestableClient) StopContainer(ctx context.Context, containerID string) error {
+	timeout := 30
+	stopOptions := container.StopOptions{
+		Timeout: &timeout,
+	}
+	return c.cli.ContainerStop(ctx, containerID, stopOptions)
+}
+
+func (c *TestableClient) RemoveContainer(ctx context.Context, containerID string, force bool) error {
+	return c.cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{
+		Force:         force,
+		RemoveVolumes: true,
+	})
+}
+
+func (c *TestableClient) GetContainerLogs(ctx context.Context, containerID string, follow bool) (io.ReadCloser, error) {
+	options := types.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     follow,
+		Timestamps: true,
+	}
+
+	return c.cli.ContainerLogs(ctx, containerID, options)
+}
+
+func (c *TestableClient) RunContainer(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, name string) (string, error) {
+	resp, err := c.cli.ContainerCreate(ctx, config, hostConfig, nil, nil, name)
+	if err != nil {
+		return "", fmt.Errorf("failed to create container: %w", err)
+	}
+
+	if err := c.cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+		_ = c.cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{Force: true})
+		return "", fmt.Errorf("failed to start container: %w", err)
+	}
+
+	return resp.ID, nil
+}
+
+func (c *TestableClient) GetContainerByName(ctx context.Context, name string) (*ContainerStatus, error) {
+	containers, err := c.ListContainers(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, cont := range containers {
+		if cont.Name == name {
+			return &cont, nil
+		}
+	}
+
+	return nil, fmt.Errorf("container not found: %s", name)
+}
+
+func (c *TestableClient) GetSystemInfo(ctx context.Context) (*SystemInfo, error) {
+	info, err := c.cli.Info(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system info: %w", err)
+	}
+
+	return &SystemInfo{
+		Containers: info.Containers,
+		Images:     info.Images,
+		Version:    info.ServerVersion,
+	}, nil
+}
+
+func (c *TestableClient) GetContainerStats(ctx context.Context, containerID string) (*ContainerStats, error) {
+	statsResp, err := c.cli.ContainerStatsOneShot(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container stats: %w", err)
+	}
+	defer statsResp.Body.Close()
+
+	var stats types.StatsJSON
+	if err := json.NewDecoder(statsResp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode stats: %w", err)
+	}
+
+	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(stats.CPUStats.SystemUsage - stats.PreCPUStats.SystemUsage)
+	cpuPercent := 0.0
+	if systemDelta > 0.0 && cpuDelta > 0.0 {
+		cpuPercent = (cpuDelta / systemDelta) * float64(len(stats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+	}
+
+	return &ContainerStats{
+		CPUPercent:    cpuPercent,
+		MemoryUsage:   stats.MemoryStats.Usage,
+		MemoryLimit:   stats.MemoryStats.Limit,
+		MemoryPercent: float64(stats.MemoryStats.Usage) / float64(stats.MemoryStats.Limit) * 100.0,
+	}, nil
+}
+
+func (c *TestableClient) CreateDockerNetwork(ctx context.Context) error {
+	networks, err := c.cli.NetworkList(ctx, types.NetworkListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	for _, network := range networks {
+		if network.Name == "mcs-network" {
+			return nil
+		}
+	}
+
+	_, err = c.cli.NetworkCreate(ctx, "mcs-network", types.NetworkCreate{
+		CheckDuplicate: true,
+		Driver:         "bridge",
+		Labels: map[string]string{
+			"mcs.managed": "true",
+		},
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create network: %w", err)
+	}
+
+	return nil
+}
+
+func (c *TestableClient) Close() error {
+	return c.cli.Close()
+}
+
+// TestSetupTerminal tests the setupTerminal function
+func TestSetupTerminal(t *testing.T) {
+	// setupTerminal always returns an error in the current implementation
+	err := setupTerminal(types.HijackedResponse{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "interactive exec not yet fully implemented")
+}
+
+// TestClient_NilClient tests behavior with nil client
+func TestClient_NilClient(t *testing.T) {
+	c := &Client{cli: nil}
+	ctx := context.Background()
+
+	// These should panic or handle gracefully
+	assert.Panics(t, func() {
+		c.ListContainers(ctx, "")
+	})
+}
+
+// For integration with the actual Docker client interface, we need to ensure
+// our mock implements the necessary methods from the Docker SDK
+var _ = func() {
+	// This ensures our MockDockerClient implements the necessary methods
+	var _ interface {
+		Ping(context.Context) (types.Ping, error)
+		ContainerList(context.Context, types.ContainerListOptions) ([]types.Container, error)
+		ContainerStart(context.Context, string, types.ContainerStartOptions) error
+		ContainerStop(context.Context, string, container.StopOptions) error
+		ContainerRemove(context.Context, string, types.ContainerRemoveOptions) error
+		ContainerLogs(context.Context, string, types.ContainerLogsOptions) (io.ReadCloser, error)
+		ContainerCreate(context.Context, *container.Config, *container.HostConfig, interface{}, interface{}, string) (container.CreateResponse, error)
+		ContainerStatsOneShot(context.Context, string) (types.ContainerStats, error)
+		ContainerExecCreate(context.Context, string, types.ExecConfig) (types.IDResponse, error)
+		ContainerExecAttach(context.Context, string, types.ExecStartCheck) (types.HijackedResponse, error)
+		Info(context.Context) (types.Info, error)
+		NetworkList(context.Context, types.NetworkListOptions) ([]types.NetworkResource, error)
+		NetworkCreate(context.Context, string, types.NetworkCreate) (types.NetworkCreateResponse, error)
+		Close() error
+	} = (*MockDockerClient)(nil)
+}
+
+// Additional edge case tests
+
+// TestClient_ListContainers_EdgeCases tests edge cases for ListContainers
+func TestClient_ListContainers_EdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name         string
+		mockResponse []types.Container
+		expected     []ContainerStatus
+	}{
+		{
+			name: "Container with multiple names",
+			mockResponse: []types.Container{
+				{
+					ID:      "abc123456789",
+					Names:   []string{"/primary-name", "/alias-name", "/another-alias"},
+					Status:  "Up 1 hour",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "test:latest",
+				},
+			},
+			expected: []ContainerStatus{
+				{
+					ID:      "abc123456789",
+					Name:    "primary-name", // Should use first name
+					Status:  "Up 1 hour",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "test:latest",
+					Stats:   nil,
+					Ports:   []string{},
+				},
+			},
+		},
+		{
+			name: "Container with no names",
+			mockResponse: []types.Container{
+				{
+					ID:      "def456789123",
+					Names:   []string{},
+					Status:  "Created",
+					State:   "created",
+					Created: time.Now().Unix(),
+					Image:   "test:latest",
+				},
+			},
+			expected: []ContainerStatus{
+				{
+					ID:      "def456789123",
+					Name:    "", // Empty name
+					Status:  "Created",
+					State:   "created",
+					Created: time.Now().Unix(),
+					Image:   "test:latest",
+					Stats:   nil,
+					Ports:   []string{},
+				},
+			},
+		},
+		{
+			name: "Container ID longer than 12 chars",
+			mockResponse: []types.Container{
+				{
+					ID:      "abcdefghijklmnopqrstuvwxyz123456789",
+					Names:   []string{"/test"},
+					Status:  "Up",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "test:latest",
+				},
+			},
+			expected: []ContainerStatus{
+				{
+					ID:      "abcdefghijkl", // Truncated to 12 chars
+					Name:    "test",
+					Status:  "Up",
+					State:   "running",
+					Created: time.Now().Unix(),
+					Image:   "test:latest",
+					Stats:   nil,
+					Ports:   []string{},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+			mockCli.On("ContainerList", ctx, mock.Anything).Return(tt.mockResponse, nil)
+
+			c := &Client{cli: mockCli}
+			result, err := c.ListContainers(ctx, "")
+
+			assert.NoError(t, err)
+			assert.Equal(t, len(tt.expected), len(result))
+
+			for i, expected := range tt.expected {
+				// ID might be truncated
+				if len(expected.ID) > 12 {
+					assert.Equal(t, expected.ID[:12], result[i].ID)
+				} else {
+					assert.Equal(t, expected.ID, result[i].ID)
+				}
+				assert.Equal(t, expected.Name, result[i].Name)
+				assert.Equal(t, expected.Status, result[i].Status)
+				assert.Equal(t, expected.State, result[i].State)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_GetContainerStats_DecodeError tests stats decoding error
+func TestClient_GetContainerStats_DecodeError(t *testing.T) {
+	ctx := context.Background()
+	containerID := "abc123"
+
+	mockCli := new(MockDockerClient)
+	
+	// Return invalid JSON that will fail to decode
+	invalidReader := io.NopCloser(strings.NewReader("invalid json"))
+	mockCli.On("ContainerStatsOneShot", ctx, containerID).
+		Return(types.ContainerStats{Body: invalidReader}, nil)
+
+	c := &Client{cli: mockCli}
+	result, err := c.GetContainerStats(ctx, containerID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to decode stats")
+
+	mockCli.AssertExpectations(t)
+}
+
+// Benchmark tests
+
+func BenchmarkCreatePortBindings(b *testing.B) {
+	ports := map[string]string{
+		"8080": "80",
+		"3000": "3000",
+		"443":  "443",
+		"5432": "5432",
+		"6379": "6379",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, err := CreatePortBindings(ports)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkClient_ListContainers(b *testing.B) {
+	ctx := context.Background()
+	mockCli := new(MockDockerClient)
+	
+	containers := make([]types.Container, 100)
+	for i := 0; i < 100; i++ {
+		containers[i] = types.Container{
+			ID:      fmt.Sprintf("container%d", i),
+			Names:   []string{fmt.Sprintf("/test-%d", i)},
+			Status:  "Up",
+			State:   "running",
+			Created: time.Now().Unix(),
+			Image:   "test:latest",
+			Ports: []types.Port{
+				{PrivatePort: 80, PublicPort: uint16(8080 + i)},
+			},
+		}
+	}
+	
+	mockCli.On("ContainerList", ctx, mock.Anything).Return(containers, nil)
+	c := &Client{cli: mockCli}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := c.ListContainers(ctx, "")
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}

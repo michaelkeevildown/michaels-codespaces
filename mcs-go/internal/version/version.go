@@ -30,7 +30,7 @@ func Info() string {
 	v := Version
 	
 	// For dev builds, include commit info
-	if v == "dev" && GitCommit != "unknown" {
+	if v == "dev" && GitCommit != "unknown" && GitCommit != "" {
 		commit := GitCommit
 		if len(commit) > 8 {
 			commit = commit[:8]

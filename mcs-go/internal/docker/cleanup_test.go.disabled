@@ -1,0 +1,1013 @@
+package docker
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/michaelkeevildown/mcs/internal/ui"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+// Extended MockDockerClient for cleanup operations
+type MockDockerClientCleanup struct {
+	MockDockerClient
+}
+
+// ContainersPrune mocks the ContainersPrune method
+func (m *MockDockerClientCleanup) ContainersPrune(ctx context.Context, pruneFilters filters.Args) (types.ContainersPruneReport, error) {
+	args := m.Called(ctx, pruneFilters)
+	return args.Get(0).(types.ContainersPruneReport), args.Error(1)
+}
+
+// ImagesPrune mocks the ImagesPrune method
+func (m *MockDockerClientCleanup) ImagesPrune(ctx context.Context, pruneFilters filters.Args) (types.ImagesPruneReport, error) {
+	args := m.Called(ctx, pruneFilters)
+	return args.Get(0).(types.ImagesPruneReport), args.Error(1)
+}
+
+// VolumesPrune mocks the VolumesPrune method
+func (m *MockDockerClientCleanup) VolumesPrune(ctx context.Context, pruneFilters filters.Args) (types.VolumesPruneReport, error) {
+	args := m.Called(ctx, pruneFilters)
+	return args.Get(0).(types.VolumesPruneReport), args.Error(1)
+}
+
+// NetworksPrune mocks the NetworksPrune method
+func (m *MockDockerClientCleanup) NetworksPrune(ctx context.Context, pruneFilters filters.Args) (types.NetworksPruneReport, error) {
+	args := m.Called(ctx, pruneFilters)
+	return args.Get(0).(types.NetworksPruneReport), args.Error(1)
+}
+
+// MockProgress for testing progress UI
+type MockProgress struct {
+	stopped bool
+	resumed bool
+}
+
+func (m *MockProgress) Stop() {
+	m.stopped = true
+}
+
+func (m *MockProgress) Resume() {
+	m.resumed = true
+}
+
+// TestClient_CleanupMCSContainers tests the CleanupMCSContainers method
+func TestClient_CleanupMCSContainers(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name             string
+		mockContainers   []types.Container
+		listError        error
+		stopErrors       map[string]error
+		removeErrors     map[string]error
+		expectError      bool
+		expectedErrorMsg string
+	}{
+		{
+			name: "Successfully cleanup MCS containers",
+			mockContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+					State: "running",
+					Labels: map[string]string{
+						"mcs.managed": "true",
+					},
+				},
+				{
+					ID:    "mcs789012",
+					Names: []string{"/mcs-another-project"},
+					State: "exited",
+					Labels: map[string]string{
+						"mcs.managed": "true",
+					},
+				},
+				{
+					ID:    "other123456",
+					Names: []string{"/other-container"},
+					State: "running",
+				},
+			},
+		},
+		{
+			name: "Cleanup with stop errors",
+			mockContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+					State: "running",
+					Labels: map[string]string{
+						"mcs.managed": "true",
+					},
+				},
+			},
+			stopErrors: map[string]error{
+				"mcs123456": errors.New("failed to stop"),
+			},
+		},
+		{
+			name: "Cleanup with remove errors",
+			mockContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+					State: "exited",
+					Labels: map[string]string{
+						"mcs.managed": "true",
+					},
+				},
+			},
+			removeErrors: map[string]error{
+				"mcs123456": errors.New("failed to remove"),
+			},
+			expectError:      true,
+			expectedErrorMsg: "removed 0 containers, failed to remove 1",
+		},
+		{
+			name:        "Error listing containers",
+			listError:   errors.New("docker daemon not available"),
+			expectError: true,
+		},
+		{
+			name:           "No MCS containers found",
+			mockContainers: []types.Container{
+				{
+					ID:    "other123456",
+					Names: []string{"/other-container"},
+					State: "running",
+				},
+			},
+		},
+		{
+			name: "Mixed MCS containers by different criteria",
+			mockContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+					State: "running",
+				},
+				{
+					ID:    "michael789012",
+					Names: []string{"/other-container"},
+					State: "running",
+					Image: "michaelkeevildown/claude-coder:latest",
+				},
+				{
+					ID:    "labeled345678",
+					Names: []string{"/labeled-container"},
+					State: "exited",
+					Labels: map[string]string{
+						"mcs.managed": "true",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			// Mock ContainerList
+			if tt.listError != nil {
+				mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+					Return(nil, tt.listError)
+			} else {
+				mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+					Return(tt.mockContainers, nil)
+
+				// Mock stop and remove operations for MCS containers
+				for _, container := range tt.mockContainers {
+					if isMCSContainer(container) {
+						// Mock StopContainer if container is running
+						if container.State == "running" {
+							stopErr := tt.stopErrors[container.ID]
+							mockCli.On("ContainerStop", ctx, container.ID, mock.Anything).
+								Return(stopErr)
+						}
+
+						// Mock ContainerRemove
+						removeErr := tt.removeErrors[container.ID]
+						mockCli.On("ContainerRemove", ctx, container.ID, types.ContainerRemoveOptions{Force: true}).
+							Return(removeErr)
+					}
+				}
+			}
+
+			c := &Client{cli: mockCli}
+			err := c.CleanupMCSContainers(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.expectedErrorMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_RemoveAllMCSContainers tests the RemoveAllMCSContainers method
+func TestClient_RemoveAllMCSContainers(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name               string
+		filteredContainers []types.Container
+		allContainers      []types.Container
+		listError          error
+		allListError       error
+		removeErrors       map[string]error
+		expectError        bool
+	}{
+		{
+			name: "Successfully remove all MCS containers",
+			filteredContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+				},
+			},
+			allContainers: []types.Container{
+				{
+					ID:    "michael789012",
+					Names: []string{"/other-container"},
+					Image: "michaelkeevildown/claude-coder:latest",
+				},
+			},
+		},
+		{
+			name: "Remove with duplicates",
+			filteredContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+				},
+			},
+			allContainers: []types.Container{
+				{
+					ID:    "mcs123456", // Same container in both lists
+					Names: []string{"/mcs-test-project"},
+					Image: "michaelkeevildown/claude-coder:other",
+				},
+				{
+					ID:    "other789012",
+					Names: []string{"/other-container"},
+					Image: "nginx:latest",
+				},
+			},
+		},
+		{
+			name:      "Error listing filtered containers",
+			listError: errors.New("permission denied"),
+		},
+		{
+			name: "Error listing all containers",
+			filteredContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+				},
+			},
+			allListError: errors.New("docker daemon error"),
+		},
+		{
+			name: "Remove errors",
+			filteredContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+				},
+			},
+			removeErrors: map[string]error{
+				"mcs123456": errors.New("container in use"),
+			},
+		},
+		{
+			name:               "No containers to remove",
+			filteredContainers: []types.Container{},
+			allContainers:      []types.Container{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			// Mock filtered container list (by name)
+			filterArgs := filters.NewArgs()
+			filterArgs.Add("name", "mcs-")
+			filteredOpts := types.ContainerListOptions{
+				All:     true,
+				Filters: filterArgs,
+			}
+
+			if tt.listError != nil {
+				mockCli.On("ContainerList", ctx, filteredOpts).
+					Return(nil, tt.listError)
+			} else {
+				mockCli.On("ContainerList", ctx, filteredOpts).
+					Return(tt.filteredContainers, nil)
+
+				// Mock all containers list
+				allOpts := types.ContainerListOptions{All: true}
+				if tt.allListError != nil {
+					mockCli.On("ContainerList", ctx, allOpts).
+						Return(nil, tt.allListError)
+				} else {
+					mockCli.On("ContainerList", ctx, allOpts).
+						Return(tt.allContainers, nil)
+				}
+
+				// Create combined unique list for remove operations
+				uniqueContainers := make(map[string]types.Container)
+				for _, c := range tt.filteredContainers {
+					uniqueContainers[c.ID] = c
+				}
+				for _, c := range tt.allContainers {
+					if c.Image != "" && c.Image != "nginx:latest" { // Only MCS images
+						uniqueContainers[c.ID] = c
+					}
+				}
+
+				// Mock ContainerRemove for unique containers
+				for id, container := range uniqueContainers {
+					removeErr := tt.removeErrors[id]
+					mockCli.On("ContainerRemove", ctx, id, types.ContainerRemoveOptions{
+						Force:         true,
+						RemoveVolumes: true,
+					}).Return(removeErr)
+				}
+			}
+
+			c := &Client{cli: mockCli}
+			err := c.RemoveAllMCSContainers(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_GetMCSContainerCount tests the GetMCSContainerCount method
+func TestClient_GetMCSContainerCount(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name           string
+		mockContainers []types.Container
+		listError      error
+		expectedCount  int
+		expectError    bool
+	}{
+		{
+			name: "Count MCS containers",
+			mockContainers: []types.Container{
+				{
+					ID:    "mcs123456",
+					Names: []string{"/mcs-test-project"},
+				},
+				{
+					ID:    "other789012",
+					Names: []string{"/other-container"},
+				},
+				{
+					ID:    "michael345678",
+					Names: []string{"/another-container"},
+					Image: "michaelkeevildown/claude-coder:latest",
+				},
+				{
+					ID:    "labeled901234",
+					Names: []string{"/labeled-container"},
+					Labels: map[string]string{
+						"mcs.managed": "true",
+					},
+				},
+			},
+			expectedCount: 3, // mcs-, michaelkeevildown/claude-coder, and labeled containers
+		},
+		{
+			name:           "No MCS containers",
+			mockContainers: []types.Container{
+				{
+					ID:    "other123456",
+					Names: []string{"/other-container"},
+					Image: "nginx:latest",
+				},
+			},
+			expectedCount: 0,
+		},
+		{
+			name:        "Error listing containers",
+			listError:   errors.New("docker daemon error"),
+			expectError: true,
+		},
+		{
+			name:          "Empty container list",
+			mockContainers: []types.Container{},
+			expectedCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClient)
+
+			if tt.listError != nil {
+				mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+					Return(nil, tt.listError)
+			} else {
+				mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+					Return(tt.mockContainers, nil)
+			}
+
+			c := &Client{cli: mockCli}
+			count, err := c.GetMCSContainerCount(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Equal(t, 0, count)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedCount, count)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestClient_CleanupDockerResources tests the CleanupDockerResources method
+func TestClient_CleanupDockerResources(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name               string
+		containersPruneErr error
+		imagesPruneErr     error
+		volumesPruneErr    error
+		networksPruneErr   error
+		expectError        bool
+		expectedErrorMsg   string
+	}{
+		{
+			name:        "Successfully cleanup all resources",
+			expectError: false,
+		},
+		{
+			name:               "Error pruning containers",
+			containersPruneErr: errors.New("failed to prune containers"),
+			expectError:        true,
+			expectedErrorMsg:   "failed to prune containers",
+		},
+		{
+			name:             "Error pruning images",
+			imagesPruneErr:   errors.New("failed to prune images"),
+			expectError:      true,
+			expectedErrorMsg: "failed to prune images",
+		},
+		{
+			name:             "Error pruning volumes",
+			volumesPruneErr:  errors.New("failed to prune volumes"),
+			expectError:      true,
+			expectedErrorMsg: "failed to prune volumes",
+		},
+		{
+			name:             "Error pruning networks",
+			networksPruneErr: errors.New("failed to prune networks"),
+			expectError:      true,
+			expectedErrorMsg: "failed to prune networks",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClientCleanup)
+
+			// Mock ContainersPrune
+			if tt.containersPruneErr != nil {
+				mockCli.On("ContainersPrune", ctx, filters.Args{}).
+					Return(types.ContainersPruneReport{}, tt.containersPruneErr)
+			} else {
+				mockCli.On("ContainersPrune", ctx, filters.Args{}).
+					Return(types.ContainersPruneReport{
+						ContainersDeleted: []string{"container1", "container2"},
+						SpaceReclaimed:    1024,
+					}, nil)
+
+				// Mock ImagesPrune only if containers prune succeeds
+				if tt.imagesPruneErr != nil {
+					mockCli.On("ImagesPrune", ctx, filters.Args{}).
+						Return(types.ImagesPruneReport{}, tt.imagesPruneErr)
+				} else {
+					mockCli.On("ImagesPrune", ctx, filters.Args{}).
+						Return(types.ImagesPruneReport{
+							ImagesDeleted:  []types.ImageDeleteResponseItem{},
+							SpaceReclaimed: 2048,
+						}, nil)
+
+					// Mock VolumesPrune only if images prune succeeds
+					if tt.volumesPruneErr != nil {
+						mockCli.On("VolumesPrune", ctx, filters.Args{}).
+							Return(types.VolumesPruneReport{}, tt.volumesPruneErr)
+					} else {
+						mockCli.On("VolumesPrune", ctx, filters.Args{}).
+							Return(types.VolumesPruneReport{
+								VolumesDeleted: []string{"volume1"},
+								SpaceReclaimed: 512,
+							}, nil)
+
+						// Mock NetworksPrune only if volumes prune succeeds
+						if tt.networksPruneErr != nil {
+							mockCli.On("NetworksPrune", ctx, filters.Args{}).
+								Return(types.NetworksPruneReport{}, tt.networksPruneErr)
+						} else {
+							mockCli.On("NetworksPrune", ctx, filters.Args{}).
+								Return(types.NetworksPruneReport{
+									NetworksDeleted: []string{"network1"},
+								}, nil)
+						}
+					}
+				}
+			}
+
+			c := &Client{cli: mockCli}
+			err := c.CleanupDockerResources(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.expectedErrorMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}
+
+// TestIsMCSContainer tests the isMCSContainer function
+func TestIsMCSContainer(t *testing.T) {
+	tests := []struct {
+		name      string
+		container types.Container
+		expected  bool
+	}{
+		{
+			name: "MCS container by name prefix",
+			container: types.Container{
+				Names: []string{"/mcs-test-project", "/alias"},
+			},
+			expected: true,
+		},
+		{
+			name: "MCS container by image",
+			container: types.Container{
+				Names: []string{"/some-container"},
+				Image: "michaelkeevildown/claude-coder:latest",
+			},
+			expected: true,
+		},
+		{
+			name: "MCS container by label",
+			container: types.Container{
+				Names: []string{"/labeled-container"},
+				Labels: map[string]string{
+					"mcs.managed": "true",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "Non-MCS container",
+			container: types.Container{
+				Names: []string{"/nginx-container"},
+				Image: "nginx:latest",
+			},
+			expected: false,
+		},
+		{
+			name: "Container with mcs.managed=false",
+			container: types.Container{
+				Names: []string{"/test-container"},
+				Labels: map[string]string{
+					"mcs.managed": "false",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "Container with empty names",
+			container: types.Container{
+				Names: []string{},
+				Image: "test:latest",
+			},
+			expected: false,
+		},
+		{
+			name: "Container with partial mcs name",
+			container: types.Container{
+				Names: []string{"/my-mcs-container"}, // Contains mcs but doesn't start with /mcs-
+				Image: "test:latest",
+			},
+			expected: false,
+		},
+		{
+			name: "Container with partial claude-coder image",
+			container: types.Container{
+				Names: []string{"/test-container"},
+				Image: "other/claude-coder:latest", // Contains claude-coder but not michaelkeevildown
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isMCSContainer(tt.container)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestUninstallDocker tests the UninstallDocker function
+func TestUninstallDocker(t *testing.T) {
+	t.Skip("Skipping UninstallDocker test - requires platform-specific implementation and sudo access")
+	
+	// This test would require mocking the platform detection and system commands
+	// Since it involves platform-specific behavior and potentially dangerous operations,
+	// we skip it in automated tests
+}
+
+// Test Docker uninstall on different platforms (unit test style)
+func TestUninstallDocker_PlatformDetection(t *testing.T) {
+	// Test that the function would handle different platforms
+	// This is a conceptual test since we can't easily mock the platform detection
+	t.Skip("Platform-specific tests require environment setup")
+}
+
+// TestUninstallDockerMacOS tests macOS-specific uninstall logic
+func TestUninstallDockerMacOS(t *testing.T) {
+	t.Skip("macOS-specific tests require macOS environment")
+}
+
+// TestUninstallDockerLinux tests Linux-specific uninstall logic  
+func TestUninstallDockerLinux(t *testing.T) {
+	t.Skip("Linux-specific tests require Linux environment and package manager access")
+}
+
+// Mock tests for UI progress functionality
+func TestCleanup_WithProgress(t *testing.T) {
+	mockProgress := &MockProgress{}
+	
+	// Test that progress can be stopped and resumed
+	mockProgress.Stop()
+	assert.True(t, mockProgress.stopped)
+	
+	mockProgress.Resume()
+	assert.True(t, mockProgress.resumed)
+}
+
+// TestCleanup_EdgeCases tests various edge cases
+func TestCleanup_EdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Context cancellation", func(t *testing.T) {
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		mockCli := new(MockDockerClient)
+		mockCli.On("ContainerList", cancelledCtx, mock.Anything).
+			Return(nil, context.Canceled)
+
+		c := &Client{cli: mockCli}
+		err := c.CleanupMCSContainers(cancelledCtx)
+
+		assert.Error(t, err)
+		mockCli.AssertExpectations(t)
+	})
+
+	t.Run("Nil client", func(t *testing.T) {
+		c := &Client{cli: nil}
+		
+		assert.Panics(t, func() {
+			c.CleanupMCSContainers(ctx)
+		})
+	})
+
+	t.Run("Container with nil labels", func(t *testing.T) {
+		container := types.Container{
+			Names:  []string{"/test-container"},
+			Labels: nil, // nil labels map
+		}
+		
+		result := isMCSContainer(container)
+		assert.False(t, result)
+	})
+
+	t.Run("Container with multiple names, some matching", func(t *testing.T) {
+		container := types.Container{
+			Names: []string{"/regular-name", "/mcs-project", "/another-name"},
+		}
+		
+		result := isMCSContainer(container)
+		assert.True(t, result)
+	})
+}
+
+// Benchmark tests for cleanup operations
+func BenchmarkIsMCSContainer(b *testing.B) {
+	containers := []types.Container{
+		{
+			Names: []string{"/mcs-test-project"},
+		},
+		{
+			Image: "michaelkeevildown/claude-coder:latest",
+			Names: []string{"/claude-container"},
+		},
+		{
+			Names: []string{"/regular-container"},
+			Labels: map[string]string{
+				"mcs.managed": "true",
+			},
+		},
+		{
+			Names: []string{"/nginx-container"},
+			Image: "nginx:latest",
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, container := range containers {
+			isMCSContainer(container)
+		}
+	}
+}
+
+func BenchmarkClient_GetMCSContainerCount(b *testing.B) {
+	ctx := context.Background()
+	
+	// Create a list of mixed containers
+	containers := make([]types.Container, 100)
+	for i := 0; i < 100; i++ {
+		if i%3 == 0 {
+			containers[i] = types.Container{
+				ID:    string(rune(i)),
+				Names: []string{"/mcs-project-" + string(rune(i))},
+			}
+		} else if i%3 == 1 {
+			containers[i] = types.Container{
+				ID:    string(rune(i)),
+				Names: []string{"/container-" + string(rune(i))},
+				Image: "michaelkeevildown/claude-coder:latest",
+			}
+		} else {
+			containers[i] = types.Container{
+				ID:    string(rune(i)),
+				Names: []string{"/other-" + string(rune(i))},
+				Image: "nginx:latest",
+			}
+		}
+	}
+
+	mockCli := new(MockDockerClient)
+	mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+		Return(containers, nil)
+
+	c := &Client{cli: mockCli}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.GetMCSContainerCount(ctx)
+	}
+}
+
+// Integration-style tests
+func TestCleanup_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration tests in short mode")
+	}
+
+	t.Run("Real client cleanup (will fail without Docker)", func(t *testing.T) {
+		// This test demonstrates how the cleanup would work with a real Docker client
+		// It will fail without Docker available, but shows the integration points
+		
+		// Skip if we're in CI or Docker is not available
+		t.Skip("Integration test requires Docker daemon")
+		
+		/*
+		client, err := NewClient()
+		if err != nil {
+			t.Skip("Docker not available:", err)
+		}
+		defer client.Close()
+
+		ctx := context.Background()
+		count, err := client.GetMCSContainerCount(ctx)
+		assert.NoError(t, err)
+		assert.GreaterOrEqual(t, count, 0)
+		*/
+	})
+}
+
+// Test cleanup behavior with many containers
+func TestCleanup_ScaleTest(t *testing.T) {
+	ctx := context.Background()
+	
+	// Create many containers to test performance
+	const numContainers = 1000
+	containers := make([]types.Container, numContainers)
+	
+	for i := 0; i < numContainers; i++ {
+		if i%10 == 0 {
+			// Every 10th container is an MCS container
+			containers[i] = types.Container{
+				ID:    string(rune(i)),
+				Names: []string{"/mcs-project-" + string(rune(i))},
+				State: "running",
+			}
+		} else {
+			containers[i] = types.Container{
+				ID:    string(rune(i)),
+				Names: []string{"/other-" + string(rune(i))},
+				State: "running",
+			}
+		}
+	}
+
+	mockCli := new(MockDockerClient)
+	mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+		Return(containers, nil)
+
+	// Mock stop and remove operations for MCS containers
+	for i := 0; i < numContainers; i++ {
+		if i%10 == 0 {
+			containerID := string(rune(i))
+			mockCli.On("ContainerStop", ctx, containerID, mock.Anything).Return(nil)
+			mockCli.On("ContainerRemove", ctx, containerID, types.ContainerRemoveOptions{Force: true}).Return(nil)
+		}
+	}
+
+	c := &Client{cli: mockCli}
+	
+	start := time.Now()
+	err := c.CleanupMCSContainers(ctx)
+	duration := time.Since(start)
+
+	assert.NoError(t, err)
+	assert.Less(t, duration, 5*time.Second, "Cleanup should complete in reasonable time")
+	mockCli.AssertExpectations(t)
+}
+
+// Test concurrent cleanup operations
+func TestCleanup_Concurrency(t *testing.T) {
+	ctx := context.Background()
+	
+	containers := []types.Container{
+		{
+			ID:    "mcs123",
+			Names: []string{"/mcs-test"},
+			State: "running",
+		},
+	}
+
+	mockCli := new(MockDockerClient)
+	mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+		Return(containers, nil)
+	mockCli.On("ContainerStop", ctx, "mcs123", mock.Anything).Return(nil)
+	mockCli.On("ContainerRemove", ctx, "mcs123", types.ContainerRemoveOptions{Force: true}).Return(nil)
+
+	c := &Client{cli: mockCli}
+
+	// Run cleanup operations concurrently
+	const numGoroutines = 10
+	done := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			done <- c.CleanupMCSContainers(ctx)
+		}()
+	}
+
+	// Wait for all operations to complete
+	for i := 0; i < numGoroutines; i++ {
+		err := <-done
+		assert.NoError(t, err)
+	}
+
+	// Note: We can't use AssertExpectations here because the mock calls
+	// will be made multiple times due to concurrent access
+}
+
+// Test memory usage during cleanup
+func TestCleanup_MemoryUsage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping memory test in short mode")
+	}
+
+	ctx := context.Background()
+	
+	// Create a large number of containers to test memory efficiency
+	const numContainers = 10000
+	containers := make([]types.Container, numContainers)
+	
+	for i := 0; i < numContainers; i++ {
+		containers[i] = types.Container{
+			ID:    string(rune(i)),
+			Names: []string{"/container-" + string(rune(i))},
+			Image: "test:latest",
+		}
+	}
+
+	mockCli := new(MockDockerClient)
+	mockCli.On("ContainerList", ctx, types.ContainerListOptions{All: true}).
+		Return(containers, nil)
+
+	c := &Client{cli: mockCli}
+	
+	// Test that getting container count doesn't consume excessive memory
+	count, err := c.GetMCSContainerCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, count) // No MCS containers in this test
+
+	mockCli.AssertExpectations(t)
+}
+
+// Test error propagation in cleanup operations
+func TestCleanup_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		setupMock func(*MockDockerClientCleanup)
+		operation func(*Client) error
+		expectError bool
+	}{
+		{
+			name: "ContainersPrune error propagation",
+			setupMock: func(m *MockDockerClientCleanup) {
+				m.On("ContainersPrune", ctx, filters.Args{}).
+					Return(types.ContainersPruneReport{}, errors.New("prune failed"))
+			},
+			operation: func(c *Client) error {
+				return c.CleanupDockerResources(ctx)
+			},
+			expectError: true,
+		},
+		{
+			name: "Multiple operation success",
+			setupMock: func(m *MockDockerClientCleanup) {
+				m.On("ContainersPrune", ctx, filters.Args{}).
+					Return(types.ContainersPruneReport{}, nil)
+				m.On("ImagesPrune", ctx, filters.Args{}).
+					Return(types.ImagesPruneReport{}, nil)
+				m.On("VolumesPrune", ctx, filters.Args{}).
+					Return(types.VolumesPruneReport{}, nil)
+				m.On("NetworksPrune", ctx, filters.Args{}).
+					Return(types.NetworksPruneReport{}, nil)
+			},
+			operation: func(c *Client) error {
+				return c.CleanupDockerResources(ctx)
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockCli := new(MockDockerClientCleanup)
+			tt.setupMock(mockCli)
+
+			c := &Client{cli: mockCli}
+			err := tt.operation(c)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockCli.AssertExpectations(t)
+		})
+	}
+}

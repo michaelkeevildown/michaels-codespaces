@@ -1,0 +1,367 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>shell: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/michaelkeevildown/mcs/internal/shell/shell.go (96.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package shell
+
+import (
+        "bufio"
+        "fmt"
+        "os"
+        "path/filepath"
+        "strings"
+)
+
+// Config represents shell configuration
+type Config struct {
+        FilePath string
+        Shell    string
+}
+
+// ShellType represents different shell types
+type ShellType string
+
+const (
+        Bash ShellType = "bash"
+        Zsh  ShellType = "zsh"
+        Sh   ShellType = "sh"
+)
+
+// DetectShell detects the current shell
+func DetectShell() ShellType <span class="cov8" title="1">{
+        // Check environment variables first
+        if os.Getenv("BASH_VERSION") != "" </span><span class="cov8" title="1">{
+                return Bash
+        }</span>
+        <span class="cov8" title="1">if os.Getenv("ZSH_VERSION") != "" </span><span class="cov8" title="1">{
+                return Zsh
+        }</span>
+        
+        // Check SHELL environment variable
+        <span class="cov8" title="1">shell := os.Getenv("SHELL")
+        if strings.Contains(shell, "bash") </span><span class="cov8" title="1">{
+                return Bash
+        }</span>
+        <span class="cov8" title="1">if strings.Contains(shell, "zsh") </span><span class="cov8" title="1">{
+                return Zsh
+        }</span>
+        
+        // Default to sh
+        <span class="cov8" title="1">return Sh</span>
+}
+
+// GetShellConfigs returns all shell configuration files
+func GetShellConfigs() []Config <span class="cov8" title="1">{
+        homeDir := os.Getenv("HOME")
+        configs := []Config{}
+        
+        // Common shell config files
+        shellFiles := map[string]ShellType{
+                ".bashrc":       Bash,
+                ".bash_profile": Bash,
+                ".zshrc":        Zsh,
+                ".zprofile":     Zsh,
+                ".profile":      Sh,
+        }
+        
+        for file, shellType := range shellFiles </span><span class="cov8" title="1">{
+                path := filepath.Join(homeDir, file)
+                if _, err := os.Stat(path); err == nil </span><span class="cov8" title="1">{
+                        configs = append(configs, Config{
+                                FilePath: path,
+                                Shell:    string(shellType),
+                        })
+                }</span>
+        }
+        
+        <span class="cov8" title="1">return configs</span>
+}
+
+// CleanConfig removes lines matching patterns from a shell configuration file
+func CleanConfig(configFile string, patterns []string) error <span class="cov8" title="1">{
+        // Read the file
+        content, err := os.ReadFile(configFile)
+        if err != nil </span><span class="cov8" title="1">{
+                if os.IsNotExist(err) </span><span class="cov8" title="1">{
+                        return nil // File doesn't exist, nothing to clean
+                }</span>
+                <span class="cov8" title="1">return err</span>
+        }
+        
+        <span class="cov8" title="1">lines := strings.Split(string(content), "\n")
+        cleanedLines := []string{}
+        skipNext := false
+        
+        for i, line := range lines </span><span class="cov8" title="1">{
+                // Check if line matches any pattern
+                shouldSkip := false
+                for _, pattern := range patterns </span><span class="cov8" title="1">{
+                        if strings.Contains(line, pattern) </span><span class="cov8" title="1">{
+                                shouldSkip = true
+                                
+                                // Check if we should skip the next line too
+                                if i+1 &lt; len(lines) </span><span class="cov8" title="1">{
+                                        nextLine := strings.TrimSpace(lines[i+1])
+                                        if strings.HasPrefix(nextLine, "alias ") ||
+                                                strings.HasPrefix(nextLine, "export ") ||
+                                                strings.HasPrefix(nextLine, "source ") </span><span class="cov8" title="1">{
+                                                skipNext = true
+                                        }</span>
+                                }
+                                <span class="cov8" title="1">break</span>
+                        }
+                }
+                
+                <span class="cov8" title="1">if skipNext </span><span class="cov8" title="1">{
+                        skipNext = false
+                        continue</span>
+                }
+                
+                <span class="cov8" title="1">if !shouldSkip </span><span class="cov8" title="1">{
+                        cleanedLines = append(cleanedLines, line)
+                }</span>
+        }
+        
+        // Write back the cleaned content
+        <span class="cov8" title="1">cleanedContent := strings.Join(cleanedLines, "\n")
+        return os.WriteFile(configFile, []byte(cleanedContent), 0644)</span>
+}
+
+// AddToConfig adds lines to a shell configuration file
+func AddToConfig(configFile string, comment string, lines []string) error <span class="cov8" title="1">{
+        // Ensure file exists
+        if _, err := os.Stat(configFile); os.IsNotExist(err) </span><span class="cov8" title="1">{
+                // Create file with basic shell header
+                header := "#!/bin/bash\n" // Safe default
+                if strings.Contains(configFile, "zsh") </span><span class="cov8" title="1">{
+                        header = "#!/bin/zsh\n"
+                }</span>
+                <span class="cov8" title="1">if err := os.WriteFile(configFile, []byte(header), 0644); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        
+        // Read existing content
+        <span class="cov8" title="1">content, err := os.ReadFile(configFile)
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        
+        // Check if any of the lines already exist
+        <span class="cov8" title="1">existingContent := string(content)
+        for _, line := range lines </span><span class="cov8" title="1">{
+                if strings.Contains(existingContent, line) </span><span class="cov8" title="1">{
+                        return nil // Already configured
+                }</span>
+        }
+        
+        // Append new configuration
+        <span class="cov8" title="1">file, err := os.OpenFile(configFile, os.O_APPEND|os.O_WRONLY, 0644)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">defer file.Close()
+        
+        writer := bufio.NewWriter(file)
+        
+        // Add spacing
+        writer.WriteString("\n")
+        
+        // Add comment
+        if comment != "" </span><span class="cov8" title="1">{
+                writer.WriteString(fmt.Sprintf("# %s\n", comment))
+        }</span>
+        
+        // Add lines
+        <span class="cov8" title="1">for _, line := range lines </span><span class="cov8" title="1">{
+                writer.WriteString(line + "\n")
+        }</span>
+        
+        <span class="cov8" title="1">return writer.Flush()</span>
+}
+
+// RemoveMCSConfig removes all MCS-related configuration from shell files
+func RemoveMCSConfig() error <span class="cov8" title="1">{
+        patterns := []string{
+                "Michael's Codespaces",
+                "MCS aliases",
+                "/.mcs/bin",
+                "# Codespace:",
+                "mcs completion",
+                "export MCS_",
+                "alias mcs=",
+        }
+        
+        configs := GetShellConfigs()
+        errors := []error{}
+        
+        for _, config := range configs </span><span class="cov8" title="1">{
+                if err := CleanConfig(config.FilePath, patterns); err != nil </span><span class="cov0" title="0">{
+                        errors = append(errors, fmt.Errorf("%s: %w", config.FilePath, err))
+                }</span>
+        }
+        
+        <span class="cov8" title="1">if len(errors) &gt; 0 </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to clean some configs: %v", errors)
+        }</span>
+        
+        <span class="cov8" title="1">return nil</span>
+}
+
+// AddMCSToPath adds MCS binary directory to PATH in shell configs
+func AddMCSToPath(binDir string) (int, error) <span class="cov8" title="1">{
+        comment := "MCS - Michael's Codespaces"
+        pathLine := fmt.Sprintf("export PATH=\"%s:$PATH\"", binDir)
+        
+        configs := GetShellConfigs()
+        updated := 0
+        
+        for _, config := range configs </span><span class="cov8" title="1">{
+                // Check if already in PATH
+                content, err := os.ReadFile(config.FilePath)
+                if err == nil &amp;&amp; strings.Contains(string(content), binDir) </span><span class="cov8" title="1">{
+                        continue</span> // Already configured
+                }
+                
+                <span class="cov8" title="1">if err := AddToConfig(config.FilePath, comment, []string{pathLine}); err == nil </span><span class="cov8" title="1">{
+                        updated++
+                }</span>
+        }
+        
+        <span class="cov8" title="1">return updated, nil</span>
+}
+
+// SourceConfig returns the command to source a shell config file
+func SourceConfig(shell ShellType) string <span class="cov8" title="1">{
+        homeDir := os.Getenv("HOME")
+        
+        switch shell </span>{
+        case Bash:<span class="cov8" title="1">
+                return fmt.Sprintf("source %s/.bashrc", homeDir)</span>
+        case Zsh:<span class="cov8" title="1">
+                return fmt.Sprintf("source %s/.zshrc", homeDir)</span>
+        default:<span class="cov8" title="1">
+                return fmt.Sprintf("source %s/.profile", homeDir)</span>
+        }
+}
+
+// GetCompletionScript generates shell completion script for the given shell
+func GetCompletionScript(shell ShellType, command string) string <span class="cov8" title="1">{
+        switch shell </span>{
+        case Bash:<span class="cov8" title="1">
+                return fmt.Sprintf("source &lt;(%s completion bash)", command)</span>
+        case Zsh:<span class="cov8" title="1">
+                return fmt.Sprintf("source &lt;(%s completion zsh)", command)</span>
+        default:<span class="cov8" title="1">
+                return ""</span>
+        }
+}
+
+// IsLoginShell checks if the current shell is a login shell
+func IsLoginShell() bool <span class="cov8" title="1">{
+        // Check if $0 starts with '-'
+        if len(os.Args) &gt; 0 &amp;&amp; strings.HasPrefix(os.Args[0], "-") </span><span class="cov8" title="1">{
+                return true
+        }</span>
+        
+        // Check common login shell indicators
+        <span class="cov8" title="1">return os.Getenv("SHLVL") == "1"</span>
+}</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

@@ -1,0 +1,358 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>git: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/michaelkeevildown/mcs/internal/git/clone.go (82.2%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package git
+
+import (
+        "context"
+        "fmt"
+        "os"
+        "path/filepath"
+        "strings"
+
+        "github.com/go-git/go-git/v5"
+        "github.com/go-git/go-git/v5/config"
+        "github.com/go-git/go-git/v5/plumbing"
+        "github.com/go-git/go-git/v5/plumbing/transport"
+        "github.com/go-git/go-git/v5/plumbing/transport/http"
+        "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+        mcsconfig "github.com/michaelkeevildown/mcs/internal/config"
+)
+
+// CloneOptions holds options for cloning a repository
+type CloneOptions struct {
+        URL      string
+        Path     string
+        Branch   string
+        Depth    int
+        Progress func(string)
+        Auth     transport.AuthMethod
+}
+
+// ProgressWriter implements io.Writer for progress updates
+type ProgressWriter struct {
+        callback func(string)
+        lastLine string
+}
+
+func (w *ProgressWriter) Write(p []byte) (n int, err error) <span class="cov8" title="1">{
+        lines := strings.Split(string(p), "\n")
+        for _, line := range lines </span><span class="cov8" title="1">{
+                line = strings.TrimSpace(line)
+                if line != "" &amp;&amp; line != w.lastLine </span><span class="cov8" title="1">{
+                        w.lastLine = line
+                        if w.callback != nil </span><span class="cov8" title="1">{
+                                // Parse git progress output
+                                if strings.Contains(line, "Counting objects:") ||
+                                        strings.Contains(line, "Compressing objects:") ||
+                                        strings.Contains(line, "Receiving objects:") ||
+                                        strings.Contains(line, "Resolving deltas:") </span><span class="cov8" title="1">{
+                                        w.callback(line)
+                                }</span>
+                        }
+                }
+        }
+        <span class="cov8" title="1">return len(p), nil</span>
+}
+
+// Clone clones a repository with progress tracking
+func Clone(ctx context.Context, opts CloneOptions) error <span class="cov8" title="1">{
+        // Ensure parent directory exists
+        if err := os.MkdirAll(filepath.Dir(opts.Path), 0755); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create parent directory: %w", err)
+        }</span>
+
+        // Determine the URL to use for cloning
+        <span class="cov8" title="1">cloneURL := opts.URL
+        
+        // Check for GitHub token (env var or config)
+        token := os.Getenv("GITHUB_TOKEN")
+        if token == "" </span><span class="cov8" title="1">{
+                if cfg, err := mcsconfig.NewManager(); err == nil </span><span class="cov8" title="1">{
+                        token = cfg.GetGitHubToken()
+                }</span>
+        }
+        
+        // If we have a GitHub token and this is a GitHub SSH URL, convert to HTTPS
+        <span class="cov8" title="1">if token != "" &amp;&amp; strings.HasPrefix(opts.URL, "git@github.com:") </span><span class="cov8" title="1">{
+                // Convert git@github.com:user/repo.git to https://github.com/user/repo.git
+                cloneURL = strings.Replace(opts.URL, "git@github.com:", "https://github.com/", 1)
+                fmt.Printf("Using GitHub token authentication (converted SSH to HTTPS)\n")
+        }</span>
+
+        // Setup clone options
+        <span class="cov8" title="1">cloneOpts := &amp;git.CloneOptions{
+                URL:      cloneURL,
+                Progress: &amp;ProgressWriter{callback: opts.Progress},
+        }
+
+        // Set branch if specified
+        if opts.Branch != "" </span><span class="cov0" title="0">{
+                cloneOpts.ReferenceName = plumbing.NewBranchReferenceName(opts.Branch)
+        }</span>
+
+        // Set depth for shallow clone
+        <span class="cov8" title="1">if opts.Depth &gt; 0 </span><span class="cov8" title="1">{
+                cloneOpts.Depth = opts.Depth
+        }</span>
+
+        // Set authentication
+        <span class="cov8" title="1">if opts.Auth != nil </span><span class="cov8" title="1">{
+                cloneOpts.Auth = opts.Auth
+        }</span> else<span class="cov8" title="1"> {
+                // Try to auto-detect auth method
+                cloneOpts.Auth = detectAuthMethod(cloneURL)
+        }</span>
+
+        // Clone the repository
+        <span class="cov8" title="1">_, err := git.PlainCloneContext(ctx, opts.Path, false, cloneOpts)
+        if err != nil </span><span class="cov8" title="1">{
+                // Clean up on failure
+                os.RemoveAll(opts.Path)
+                return fmt.Errorf("failed to clone repository: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// detectAuthMethod attempts to detect the appropriate auth method
+func detectAuthMethod(url string) transport.AuthMethod <span class="cov8" title="1">{
+        // First, check if we have a GitHub token - this is preferred over SSH
+        // Check environment variable first (for CI/CD compatibility)
+        token := os.Getenv("GITHUB_TOKEN")
+        
+        // If no env var, check MCS config
+        if token == "" </span><span class="cov8" title="1">{
+                if cfg, err := mcsconfig.NewManager(); err == nil </span><span class="cov8" title="1">{
+                        token = cfg.GetGitHubToken()
+                }</span>
+        }
+        
+        // If we have a token and this is a GitHub URL, use it
+        <span class="cov8" title="1">if token != "" &amp;&amp; strings.Contains(url, "github.com") </span><span class="cov8" title="1">{
+                return &amp;http.BasicAuth{
+                        Username: "token",
+                        Password: token,
+                }
+        }</span>
+
+        // GitLab token
+        <span class="cov8" title="1">if token := os.Getenv("GITLAB_TOKEN"); token != "" </span><span class="cov8" title="1">{
+                if strings.Contains(url, "gitlab") </span><span class="cov8" title="1">{
+                        return &amp;http.BasicAuth{
+                                Username: "oauth2",
+                                Password: token,
+                        }
+                }</span>
+        }
+
+        // Fall back to SSH for git@ URLs if no token is available
+        <span class="cov8" title="1">if strings.HasPrefix(url, "git@") || strings.Contains(url, "ssh://") </span><span class="cov8" title="1">{
+                // Try to use SSH key from default location
+                homeDir, _ := os.UserHomeDir()
+                sshKeyPath := filepath.Join(homeDir, ".ssh", "id_rsa")
+                
+                // Check for id_ed25519 if id_rsa doesn't exist
+                if _, err := os.Stat(sshKeyPath); os.IsNotExist(err) </span><span class="cov8" title="1">{
+                        sshKeyPath = filepath.Join(homeDir, ".ssh", "id_ed25519")
+                }</span>
+
+                <span class="cov8" title="1">if _, err := os.Stat(sshKeyPath); err == nil </span><span class="cov8" title="1">{
+                        auth, err := ssh.NewPublicKeysFromFile("git", sshKeyPath, "")
+                        if err == nil </span><span class="cov8" title="1">{
+                                return auth
+                        }</span>
+                        // Log the error for debugging
+                        <span class="cov0" title="0">fmt.Printf("Warning: Failed to load SSH key from %s: %v\n", sshKeyPath, err)</span>
+                }
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// ValidateRepository checks if a URL points to a valid repository
+func ValidateRepository(ctx context.Context, url string) error <span class="cov8" title="1">{
+        // Create a temporary directory for validation
+        tempDir, err := os.MkdirTemp("", "mcs-validate-*")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create temp directory: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer os.RemoveAll(tempDir)
+
+        // Convert SSH URL to HTTPS if we have a GitHub token
+        validateURL := url
+        token := os.Getenv("GITHUB_TOKEN")
+        if token == "" </span><span class="cov8" title="1">{
+                if cfg, err := mcsconfig.NewManager(); err == nil </span><span class="cov8" title="1">{
+                        token = cfg.GetGitHubToken()
+                }</span>
+        }
+        
+        <span class="cov8" title="1">if token != "" &amp;&amp; strings.HasPrefix(url, "git@github.com:") </span><span class="cov0" title="0">{
+                validateURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+        }</span>
+
+        // Try to list references without cloning
+        <span class="cov8" title="1">remote := git.NewRemote(nil, &amp;config.RemoteConfig{
+                Name: "origin",
+                URLs: []string{validateURL},
+        })
+
+        auth := detectAuthMethod(validateURL)
+        _, err = remote.ListContext(ctx, &amp;git.ListOptions{
+                Auth: auth,
+        })
+
+        if err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("repository validation failed: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+// GetDefaultBranch determines the default branch of a repository
+func GetDefaultBranch(ctx context.Context, url string) (string, error) <span class="cov8" title="1">{
+        // Convert SSH URL to HTTPS if we have a GitHub token
+        checkURL := url
+        token := os.Getenv("GITHUB_TOKEN")
+        if token == "" </span><span class="cov8" title="1">{
+                if cfg, err := mcsconfig.NewManager(); err == nil </span><span class="cov8" title="1">{
+                        token = cfg.GetGitHubToken()
+                }</span>
+        }
+        
+        <span class="cov8" title="1">if token != "" &amp;&amp; strings.HasPrefix(url, "git@github.com:") </span><span class="cov0" title="0">{
+                checkURL = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+        }</span>
+
+        <span class="cov8" title="1">remote := git.NewRemote(nil, &amp;config.RemoteConfig{
+                Name: "origin",
+                URLs: []string{checkURL},
+        })
+
+        auth := detectAuthMethod(checkURL)
+        refs, err := remote.ListContext(ctx, &amp;git.ListOptions{
+                Auth: auth,
+        })
+
+        if err != nil </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("failed to list references: %w", err)
+        }</span>
+
+        // Look for HEAD reference
+        <span class="cov0" title="0">for _, ref := range refs </span><span class="cov0" title="0">{
+                if ref.Name().String() == "HEAD" </span><span class="cov0" title="0">{
+                        target := ref.Target().Short()
+                        return strings.TrimPrefix(target, "refs/heads/"), nil
+                }</span>
+        }
+
+        // Fallback to common defaults
+        <span class="cov0" title="0">for _, ref := range refs </span><span class="cov0" title="0">{
+                name := ref.Name().String()
+                if name == "refs/heads/main" || name == "refs/heads/master" </span><span class="cov0" title="0">{
+                        return strings.TrimPrefix(name, "refs/heads/"), nil
+                }</span>
+        }
+
+        <span class="cov0" title="0">return "main", nil</span>
+}</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

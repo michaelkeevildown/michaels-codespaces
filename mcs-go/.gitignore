@@ -12,8 +12,17 @@ dist/
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool
+# Test artifacts and coverage
 *.out
+test/coverage/unit/*.out
+test/coverage/integration/*.out
+test/coverage/e2e/*.out
+test/reports/*.xml
+test/reports/*.json
+test/reports/*.html
+test/fixtures/temp/
+test/integration/temp/
+.test-cache/
 
 # Go workspace file
 go.work
