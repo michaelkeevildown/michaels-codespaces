@@ -6,10 +6,9 @@ import (
 
 	"github.com/michaelkeevildown/mcs/internal/cli"
 	"github.com/michaelkeevildown/mcs/internal/update"
+	"github.com/michaelkeevildown/mcs/internal/version"
 	"github.com/spf13/cobra"
 )
-
-var version = "dev"
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -19,7 +18,7 @@ func main() {
 environments optimized for AI agents and modern development workflows.
 
 Run AI agents without constraints, on your own hardware.`,
-		Version: version,
+		Version: version.Info(),
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Skip update check for certain commands
 			skipCommands := map[string]bool{
@@ -32,7 +31,7 @@ Run AI agents without constraints, on your own hardware.`,
 			
 			if !skipCommands[cmd.Name()] {
 				// Check for updates in the background
-				go update.CheckForUpdates(version)
+				go update.CheckForUpdates(version.Info())
 			}
 		},
 	}
@@ -60,6 +59,7 @@ Run AI agents without constraints, on your own hardware.`,
 		cli.CleanupCommand(),
 		cli.DestroyCommand(),
 		cli.BackupCommand(),
+		cli.VersionCommand(),
 	)
 
 	// Customize help

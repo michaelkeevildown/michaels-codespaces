@@ -3,7 +3,19 @@
 # Variables
 BINARY_NAME=mcs
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-X main.version=$(VERSION)"
+GIT_COMMIT=$(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+GIT_TAG=$(shell git describe --exact-match --tags 2>/dev/null || echo "")
+GIT_DIRTY=$(shell test -n "`git status --porcelain`" && echo "true" || echo "false")
+BUILD_TIME=$(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+# Build flags
+LDFLAGS=-ldflags "\
+	-X github.com/michaelkeevildown/mcs/internal/version.Version=$(VERSION) \
+	-X github.com/michaelkeevildown/mcs/internal/version.GitCommit=$(GIT_COMMIT) \
+	-X github.com/michaelkeevildown/mcs/internal/version.GitTag=$(GIT_TAG) \
+	-X github.com/michaelkeevildown/mcs/internal/version.GitDirty=$(GIT_DIRTY) \
+	-X github.com/michaelkeevildown/mcs/internal/version.BuildTime=$(BUILD_TIME)"
+
 INSTALL_PATH=$(HOME)/.mcs/bin
 
 # Build the binary
@@ -76,3 +88,30 @@ tidy:
 	@echo "🧹 Tidying dependencies..."
 	@go mod tidy
 	@echo "✅ Dependencies tidied"
+
+# Version helpers
+.PHONY: version version-patch version-minor version-major
+
+# Display current version
+version:
+	@echo "Current version: $(VERSION)"
+
+# Create a patch release (v0.1.0 -> v0.1.1)
+version-patch:
+	@echo "Creating patch release..."
+	@./scripts/release.sh patch
+
+# Create a minor release (v0.1.0 -> v0.2.0)
+version-minor:
+	@echo "Creating minor release..."
+	@./scripts/release.sh minor
+
+# Create a major release (v0.1.0 -> v1.0.0)
+version-major:
+	@echo "Creating major release..."
+	@./scripts/release.sh major
+
+# Create a pre-release
+version-pre:
+	@echo "Creating pre-release..."
+	@./scripts/release.sh pre

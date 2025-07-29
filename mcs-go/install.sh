@@ -55,6 +55,7 @@ EOF
 MCS_HOME="${MCS_HOME:-$HOME/.mcs}"
 REPO_URL="${MCS_REPO_URL:-https://github.com/michaelkeevildown/michaels-codespaces.git}"
 BRANCH="${MCS_BRANCH:-main}"
+INSTALL_MODE="${MCS_INSTALL_MODE:-auto}"  # auto, source, release, dev
 
 # Detect OS and architecture
 detect_platform() {
@@ -290,6 +291,108 @@ setup_path_config() {
     info "MCS is available in the current session at: $BIN_DIR/mcs"
 }
 
+# Download from GitHub releases
+download_from_release() {
+    local release_type="${1:-latest}"  # latest, dev, or specific version
+    
+    info "Downloading MCS from GitHub releases..."
+    
+    # Determine the release URL
+    local release_api_url
+    local release_name
+    
+    if [ "$release_type" = "dev" ]; then
+        release_api_url="https://api.github.com/repos/michaelkeevildown/michaels-codespaces/releases/tags/dev-latest"
+        release_name="development"
+    elif [ "$release_type" = "latest" ]; then
+        release_api_url="https://api.github.com/repos/michaelkeevildown/michaels-codespaces/releases/latest"
+        release_name="latest stable"
+    else
+        # Specific version
+        release_api_url="https://api.github.com/repos/michaelkeevildown/michaels-codespaces/releases/tags/${release_type}"
+        release_name="$release_type"
+    fi
+    
+    info "Fetching $release_name release information..."
+    
+    # Get release data
+    local release_data
+    release_data=$(curl -fsSL "$release_api_url" 2>/dev/null) || {
+        error "Failed to fetch release information"
+        return 1
+    }
+    
+    # Extract download URL for our platform
+    local download_url
+    local archive_name="mcs-${OS}-${ARCH}"
+    
+    if [ "$OS" = "windows" ]; then
+        archive_name="${archive_name}.zip"
+    else
+        archive_name="${archive_name}.tar.gz"
+    fi
+    
+    download_url=$(echo "$release_data" | grep -o "\"browser_download_url\": *\"[^\"]*${archive_name}\"" | cut -d'"' -f4 | head -1)
+    
+    if [ -z "$download_url" ]; then
+        error "No release found for platform: ${OS}-${ARCH}"
+        return 1
+    fi
+    
+    # Download the archive
+    local temp_dir=$(mktemp -d)
+    local archive_path="$temp_dir/$archive_name"
+    
+    info "Downloading from: $download_url"
+    if ! curl -fsSL "$download_url" -o "$archive_path"; then
+        error "Failed to download release"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Extract the binary
+    info "Extracting binary..."
+    cd "$temp_dir"
+    
+    if [ "$OS" = "windows" ]; then
+        unzip -q "$archive_name" || {
+            error "Failed to extract archive"
+            rm -rf "$temp_dir"
+            return 1
+        }
+    else
+        tar -xzf "$archive_name" || {
+            error "Failed to extract archive"
+            rm -rf "$temp_dir"
+            return 1
+        }
+    fi
+    
+    # Find and install the binary
+    local binary_name="mcs"
+    if [ "$OS" = "windows" ]; then
+        binary_name="mcs.exe"
+    fi
+    
+    if [ -f "$binary_name" ]; then
+        chmod +x "$binary_name"
+        mv "$binary_name" "$BIN_DIR/mcs"
+        success "Downloaded and installed MCS $release_name"
+        
+        # Get version info
+        local version=$("$BIN_DIR/mcs" version 2>/dev/null || echo "unknown")
+        info "Installed version: $version"
+    else
+        error "Binary not found in archive"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Cleanup
+    rm -rf "$temp_dir"
+    return 0
+}
+
 # Build from source
 build_from_source() {
     cd "$MCS_HOME/mcs-go"
@@ -325,12 +428,59 @@ build_from_source() {
 
 # Main installation
 main() {
+    # Parse command line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --dev)
+                INSTALL_MODE="dev"
+                shift
+                ;;
+            --source)
+                INSTALL_MODE="source"
+                shift
+                ;;
+            --release)
+                INSTALL_MODE="release"
+                shift
+                ;;
+            --version)
+                INSTALL_MODE="version"
+                INSTALL_VERSION="$2"
+                shift 2
+                ;;
+            *)
+                error "Unknown option: $1"
+                echo "Usage: $0 [--dev|--source|--release|--version VERSION]"
+                exit 1
+                ;;
+        esac
+    done
+    
     # Show beautiful header
     show_header
     
     info "Installing Michael's Codespaces (Go version)..."
     echo ""
-    echo "Installation philosophy: Build from source for full control"
+    
+    # Display installation mode
+    case "$INSTALL_MODE" in
+        dev)
+            echo "Installation mode: Development (latest commit)"
+            ;;
+        source)
+            echo "Installation mode: Build from source"
+            ;;
+        release)
+            echo "Installation mode: Latest stable release"
+            ;;
+        version)
+            echo "Installation mode: Specific version ($INSTALL_VERSION)"
+            ;;
+        auto)
+            echo "Installation mode: Auto-detect (release → source)"
+            ;;
+    esac
+    
     echo "Repository: $REPO_URL"
     if [ -n "$BRANCH" ] && [ "$BRANCH" != "main" ]; then
         echo "Branch: $BRANCH"
@@ -358,47 +508,76 @@ main() {
     mkdir -p "$BIN_DIR"
     mkdir -p "$HOME/codespaces"
     
-    # Clone or update repository
-    clone_or_update_repo
+    # Determine installation method based on mode
+    local install_success=false
     
-    # Determine installation method
-    if [ "$GO_AVAILABLE" = true ]; then
-        build_from_source
-    else
-        warning "Go compiler not found!"
-        echo ""
-        echo "MCS is designed to be built from source for full transparency and control."
-        echo "You have two options:"
-        echo ""
-        echo "1. Install Go (recommended):"
-        echo "   - Ubuntu/Debian: sudo apt install golang-go"
-        echo "   - macOS: brew install go"
-        echo "   - Or download from: https://go.dev/dl/"
-        echo ""
-        echo "2. Download pre-built binary (fallback):"
-        echo "   This option requires trusting pre-compiled binaries."
-        echo ""
-        read -p "Would you like to download a pre-built binary? [y/N] " -n 1 -r
-        echo
-        
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            # Try to download pre-built binary
-            RELEASE_URL="https://github.com/michaelkeevildown/mcs/releases/latest/download/mcs-${PLATFORM}"
-            
-            info "Downloading from: $RELEASE_URL"
-            if curl -fsSL "$RELEASE_URL" -o "$BIN_DIR/mcs"; then
-                chmod +x "$BIN_DIR/mcs"
-                success "Downloaded pre-built binary"
-                warning "Note: You're using a pre-built binary. For full control, install Go and rebuild."
+    case "$INSTALL_MODE" in
+        auto)
+            # Try release first, then source
+            info "Attempting to download latest release..."
+            if download_from_release "latest"; then
+                install_success=true
             else
-                error "Failed to download pre-built binary"
-                error "Please install Go and run this script again"
-                exit 1
+                warning "Release download failed, trying to build from source..."
+                if [ "$GO_AVAILABLE" = true ]; then
+                    clone_or_update_repo
+                    if build_from_source; then
+                        install_success=true
+                    fi
+                else
+                    error "Go compiler not found and release download failed"
+                fi
             fi
-        else
-            error "Installation cancelled. Please install Go and run this script again."
-            exit 1
-        fi
+            ;;
+            
+        dev)
+            # Download development build
+            if download_from_release "dev"; then
+                install_success=true
+            else
+                error "Failed to download development build"
+            fi
+            ;;
+            
+        release)
+            # Download latest stable release
+            if download_from_release "latest"; then
+                install_success=true
+            else
+                error "Failed to download latest release"
+            fi
+            ;;
+            
+        version)
+            # Download specific version
+            if download_from_release "$INSTALL_VERSION"; then
+                install_success=true
+            else
+                error "Failed to download version $INSTALL_VERSION"
+            fi
+            ;;
+            
+        source)
+            # Build from source
+            if [ "$GO_AVAILABLE" = true ]; then
+                clone_or_update_repo
+                if build_from_source; then
+                    install_success=true
+                fi
+            else
+                error "Go compiler not found - cannot build from source"
+                echo ""
+                echo "Install Go first:"
+                echo "  - Ubuntu/Debian: sudo apt install golang-go"
+                echo "  - macOS: brew install go"
+                echo "  - Or download from: https://go.dev/dl/"
+            fi
+            ;;
+    esac
+    
+    if [ "$install_success" = false ]; then
+        error "Installation failed"
+        exit 1
     fi
     
     # Create shell completion

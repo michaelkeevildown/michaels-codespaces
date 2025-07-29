@@ -50,21 +50,52 @@ Your Ubuntu Server + Our Magic =
 Michael's Codespaces is built entirely in Go. Install with a single command:
 
 ```bash
-# Install from source (recommended)
+# Install latest stable release (recommended)
 curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash
 
-# Or for a specific branch:
-curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | MCS_BRANCH=feature-branch bash
+# Install from source (requires Go)
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash -s -- --source
+
+# Install development build (latest commits)
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash -s -- --dev
+
+# Install specific version
+curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash -s -- --version v1.0.0
 ```
 
 The installer will:
-- Build the `mcs` binary from Go source code (if Go is available)
-- Or download a pre-built binary as fallback
+- Download the appropriate pre-built binary for your platform
+- Or build from source if you prefer (requires Go)
 - Install it to `~/.mcs/bin/mcs`
 - Set up your PATH automatically
 - Configure shell completions
 
-☕ That's it! One command and you get a clean Go binary.
+### 📦 Installation Options
+
+- **Latest Release** (default): Stable, tested version
+- **Development Build** (`--dev`): Latest features, may be unstable
+- **From Source** (`--source`): Build locally, requires Go compiler
+- **Specific Version** (`--version`): Install a particular release
+
+### 🔄 Updating
+
+Keep MCS up to date with:
+
+```bash
+# Update to latest stable release
+mcs update
+
+# Update to latest development build
+mcs update --dev
+
+# Check for updates without installing
+mcs update --check
+
+# View current version
+mcs version
+```
+
+☕ That's it! One command and you're ready to go.
 
 ## 🎮 How It Works
 

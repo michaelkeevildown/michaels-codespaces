@@ -1,0 +1,179 @@
+name: CI Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'mcs-go/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'mcs-go/**'
+      - '.github/workflows/ci.yml'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'mcs-go/go.mod'
+        cache-dependency-path: 'mcs-go/go.sum'
+    
+    - name: Run tests
+      working-directory: ./mcs-go
+      run: |
+        go test -v -race ./...
+    
+    - name: Run linting
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        working-directory: ./mcs-go
+        args: --timeout=5m
+
+  build:
+    name: Build Dev Binaries
+    runs-on: ubuntu-latest
+    needs: test
+    
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: windows
+            arch: amd64
+            ext: .exe
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for git describe
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'mcs-go/go.mod'
+        cache-dependency-path: 'mcs-go/go.sum'
+    
+    - name: Build binary
+      working-directory: ./mcs-go
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+      run: |
+        VERSION=$(git describe --tags --always --dirty)
+        GIT_COMMIT=$(git rev-parse HEAD)
+        GIT_DIRTY=$(test -n "`git status --porcelain`" && echo "true" || echo "false")
+        BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+        
+        go build -ldflags "\
+          -X github.com/michaelkeevildown/mcs/internal/version.Version=${VERSION} \
+          -X github.com/michaelkeevildown/mcs/internal/version.GitCommit=${GIT_COMMIT} \
+          -X github.com/michaelkeevildown/mcs/internal/version.GitDirty=${GIT_DIRTY} \
+          -X github.com/michaelkeevildown/mcs/internal/version.BuildTime=${BUILD_TIME}" \
+          -o dist/mcs-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} \
+          cmd/mcs/main.go
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: mcs-${{ matrix.os }}-${{ matrix.arch }}
+        path: mcs-go/dist/mcs-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+        retention-days: 7
+
+  update-dev-release:
+    name: Update Dev Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: Prepare binaries
+      run: |
+        mkdir -p release
+        find artifacts -type f -name 'mcs-*' -exec cp {} release/ \;
+        cd release
+        
+        # Generate checksums
+        sha256sum mcs-* > checksums.txt
+        
+        # Make binaries executable
+        chmod +x mcs-*
+        
+        # List files for verification
+        ls -la
+    
+    - name: Get version info
+      id: version
+      run: |
+        VERSION=$(git describe --tags --always --dirty)
+        COMMIT=$(git rev-parse --short HEAD)
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+        echo "date=$(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
+    
+    - name: Update dev release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: dev-latest
+        name: Development Build (Latest)
+        body: |
+          🚧 **Development Build** - Automatically updated with each commit to main
+          
+          **Version:** `${{ steps.version.outputs.version }}`
+          **Commit:** ${{ steps.version.outputs.commit }}
+          **Built:** ${{ steps.version.outputs.date }}
+          
+          ⚠️ **Note:** This is a development build and may be unstable. For production use, please use a tagged release.
+          
+          ## Installation
+          
+          ### Quick Install (Linux/macOS)
+          ```bash
+          # Download and install latest dev build
+          curl -fsSL https://raw.githubusercontent.com/michaelkeevildown/michaels-codespaces/main/mcs-go/install.sh | bash -s -- --dev
+          ```
+          
+          ### Manual Download
+          Download the appropriate binary for your platform below and place it in your PATH.
+          
+          ### Build from Source
+          ```bash
+          git clone https://github.com/michaelkeevildown/michaels-codespaces.git
+          cd michaels-codespaces/mcs-go
+          make build
+          ```
+        draft: false
+        prerelease: true
+        files: |
+          release/mcs-*
+          release/checksums.txt
