@@ -10,6 +10,7 @@ import (
 	"github.com/michaelkeevildown/mcs/internal/codespace"
 	"github.com/michaelkeevildown/mcs/internal/components"
 	"github.com/michaelkeevildown/mcs/internal/ui"
+	"github.com/michaelkeevildown/mcs/internal/update"
 	"github.com/michaelkeevildown/mcs/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -59,6 +60,15 @@ If a collision occurs, a random suffix (e.g., 'happy-narwhal') will be added.`,
 
 			// Show beautiful header
 			ui.ShowHeader()
+
+			// Quick update check (non-blocking)
+			go func() {
+				checker := update.NewUpdateChecker()
+				if hasUpdate, _, _, err := checker.CheckForUpdates(ctx); err == nil && hasUpdate {
+					fmt.Println()
+					fmt.Println("💡 Update available! Run 'mcs check-updates' for details.")
+				}
+			}()
 
 			// Create progress indicator
 			progress := ui.NewProgress()

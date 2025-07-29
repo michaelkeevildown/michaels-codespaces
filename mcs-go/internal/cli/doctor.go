@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/michaelkeevildown/mcs/internal/docker"
 	"github.com/michaelkeevildown/mcs/internal/ui"
+	"github.com/michaelkeevildown/mcs/internal/update"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +25,9 @@ var (
 
 // DoctorCommand creates the 'doctor' command
 func DoctorCommand() *cobra.Command {
-	return &cobra.Command{
+	var checkUpdates bool
+	
+	cmd := &cobra.Command{
 		Use:     "doctor",
 		Aliases: []string{"check"},
 		Short:   "🏥 Check system health and requirements",
@@ -37,6 +41,7 @@ func DoctorCommand() *cobra.Command {
 			// Track if any checks failed
 			hasWarnings := false
 			hasErrors := false
+			hasUpdate := false
 			
 			// Check Docker
 			fmt.Print("Docker: ")
@@ -114,6 +119,25 @@ func DoctorCommand() *cobra.Command {
 				fmt.Println(passStyle.Render("✓") + fmt.Sprintf(" %s free", formatBytes(free)))
 			}
 			
+			// Check for updates if requested
+			if checkUpdates {
+				fmt.Print("Code-server updates: ")
+				checker := update.NewUpdateChecker()
+				ctx := context.Background()
+				
+				updateAvailable, latest, localVersion, err := checker.CheckForUpdates(ctx)
+				if err != nil {
+					fmt.Println(warnStyle.Render("⚠") + " unable to check")
+					hasWarnings = true
+				} else if updateAvailable {
+					fmt.Println(warnStyle.Render("⚠") + fmt.Sprintf(" update available (%s → %s)", localVersion, latest.TagName))
+					hasWarnings = true
+					hasUpdate = true
+				} else {
+					fmt.Println(passStyle.Render("✓") + fmt.Sprintf(" up to date (%s)", localVersion))
+				}
+			}
+			
 			// Summary
 			fmt.Println()
 			if hasErrors {
@@ -127,14 +151,21 @@ func DoctorCommand() *cobra.Command {
 			
 			// Tips
 			fmt.Println()
-			fmt.Println(dimStyle.Render("Tips:"))
-			fmt.Println(dimStyle.Render("  • Use 'mcs create <repo>' to create your first codespace"))
-			fmt.Println(dimStyle.Render("  • Use 'mcs update' to update MCS to the latest version"))
-			fmt.Println(dimStyle.Render("  • Use 'mcs help' to see all available commands"))
+			fmt.Println(doctorDimStyle.Render("Tips:"))
+			fmt.Println(doctorDimStyle.Render("  • Use 'mcs create <repo>' to create your first codespace"))
+			fmt.Println(doctorDimStyle.Render("  • Use 'mcs update' to update MCS to the latest version"))
+			if checkUpdates && hasUpdate {
+				fmt.Println(doctorDimStyle.Render("  • Use 'mcs update-images' to update code-server"))
+			}
+			fmt.Println(doctorDimStyle.Render("  • Use 'mcs help' to see all available commands"))
 			
 			return nil
 		},
 	}
+	
+	cmd.Flags().BoolVar(&checkUpdates, "check-updates", false, "Check for code-server updates")
+	
+	return cmd
 }
 
 func checkDocker() error {
