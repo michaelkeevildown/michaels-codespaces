@@ -1,5 +1,5 @@
 # Python development environment
-FROM mcs/code-server-base:latest
+FROM codercom/code-server:latest
 
 # Metadata
 LABEL description="MCS Python development environment"

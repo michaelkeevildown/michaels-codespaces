@@ -1,5 +1,5 @@
 # Go development environment
-FROM mcs/code-server-base:latest
+FROM codercom/code-server:latest
 
 # Metadata
 LABEL description="MCS Go development environment"
