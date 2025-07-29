@@ -43,7 +43,8 @@ RUN mkdir -p /home/coder/go/bin /home/coder/go/src /home/coder/go/pkg && \
     chown -R coder:coder /home/coder/go
 
 # Install language-specific tools
-RUN pip3 install --upgrade pip virtualenv pipenv poetry && \
+# Use --break-system-packages flag for PEP 668 compliance or use pipx
+RUN pip3 install --upgrade --break-system-packages pip virtualenv pipenv poetry && \
     npm install -g yarn pnpm typescript nodemon && \
     go install golang.org/x/tools/gopls@latest
 

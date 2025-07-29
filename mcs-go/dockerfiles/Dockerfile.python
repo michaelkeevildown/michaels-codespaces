@@ -17,8 +17,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install common Python packages
-RUN pip3 install --upgrade pip && \
-    pip3 install \
+# Use --break-system-packages flag for PEP 668 compliance
+RUN pip3 install --upgrade --break-system-packages pip && \
+    pip3 install --break-system-packages \
     virtualenv \
     pipenv \
     poetry \
